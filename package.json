@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate": "tsx src/persistencia/migrate.ts",
+    "migrate": "tsx src/persistence/migrate.ts",
     "db:generate": "drizzle-kit generate",
-    "seed": "tsx src/persistencia/seed.ts"
+    "seed": "tsx src/persistence/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

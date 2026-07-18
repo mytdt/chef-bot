@@ -7,8 +7,8 @@ if (!databaseUrl) {
 }
 
 export default defineConfig({
-  schema: "./src/persistencia/schema.ts",
-  out: "./src/persistencia/migrations",
+  schema: "./src/persistence/schema.ts",
+  out: "./src/persistence/migrations",
   dialect: "postgresql",
   dbCredentials: {
     url: databaseUrl,

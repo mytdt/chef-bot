@@ -1,9 +1,9 @@
 import { Telegraf } from "telegraf";
 import type { Context } from "telegraf";
-import { criarMiddlewareAutorizacao } from "src/bot/middleware/autorizacao.js";
+import { createAuthorizationMiddleware } from "src/bot/middleware/authorization.js";
 
-export function criarBot(botToken: string, idsAutorizados: string[]): Telegraf<Context> {
+export function createBot(botToken: string, authorizedIds: string[]): Telegraf<Context> {
   const bot = new Telegraf<Context>(botToken);
-  bot.use(criarMiddlewareAutorizacao(idsAutorizados));
+  bot.use(createAuthorizationMiddleware(authorizedIds));
   return bot;
 }

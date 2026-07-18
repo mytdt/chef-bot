@@ -1,17 +1,17 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { parseTextoContagem } from "src/llm/claudeClient.js";
-import { parseContagemSchema, type ParseContagem } from "src/bot/parse.schema.js";
+import { requestStructuredParse } from "src/llm/claudeClient.js";
+import { countParseSchema, type ParsedCount } from "src/bot/parse.schema.js";
 
 /**
- * Toda saída do LLM passa por aqui antes de tocar em lógica de negócio — se o JSON
- * vier malformado, falha explicitamente em vez de seguir com dados inválidos (D1
- * depende de o colaborador ver e confirmar exatamente o que foi parseado).
+ * Every LLM output passes through here before touching business logic — if the JSON
+ * comes back malformed, this fails explicitly instead of proceeding with invalid data
+ * (D1 relies on the collaborator seeing and confirming exactly what was parsed).
  */
-export async function parseContagemTexto(client: Anthropic, textoBruto: string): Promise<ParseContagem> {
-  const bruto = await parseTextoContagem(client, textoBruto);
-  const resultado = parseContagemSchema.safeParse(bruto);
-  if (!resultado.success) {
-    throw new Error(`Parse do LLM não passou na validação Zod: ${resultado.error.message}`);
+export async function parseCountText(client: Anthropic, rawText: string): Promise<ParsedCount> {
+  const raw = await requestStructuredParse(client, rawText);
+  const result = countParseSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error(`LLM parse failed Zod validation: ${result.error.message}`);
   }
-  return resultado.data;
+  return result.data;
 }

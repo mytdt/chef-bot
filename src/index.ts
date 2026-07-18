@@ -1,43 +1,43 @@
-import { carregarEnv } from "src/config/env.js";
-import { criarDb } from "src/persistencia/db.js";
-import { criarClaudeClient } from "src/llm/claudeClient.js";
-import { criarBot } from "src/bot/telegram.js";
-import { registrarHandlerMovimento } from "src/bot/handlers/movimento.js";
-import { registrarHandlerAlerta } from "src/bot/handlers/alerta.js";
-import { registrarHandlerConfirmacao } from "src/bot/handlers/confirmacao.js";
-import { registrarHandlerContagem } from "src/bot/handlers/contagem.js";
-import { iniciarEscalonamento } from "src/alertas/escalonamento.js";
+import { loadEnv } from "src/config/env.js";
+import { createDb } from "src/persistence/db.js";
+import { createClaudeClient } from "src/llm/claudeClient.js";
+import { createBot } from "src/bot/telegram.js";
+import { registerMovementHandler } from "src/bot/handlers/movement.js";
+import { registerAlertHandler } from "src/bot/handlers/alert.js";
+import { registerConfirmationHandler } from "src/bot/handlers/confirmation.js";
+import { registerCountHandler } from "src/bot/handlers/count.js";
+import { startEscalation } from "src/alerts/escalation.js";
 
 async function main() {
-  const env = carregarEnv();
-  const db = criarDb({ DATABASE_URL: env.DATABASE_URL });
-  const claudeClient = criarClaudeClient(env.ANTHROPIC_API_KEY);
-  const bot = criarBot(env.BOT_TOKEN, env.AUTHORIZED_TELEGRAM_IDS);
+  const env = loadEnv();
+  const db = createDb({ DATABASE_URL: env.DATABASE_URL });
+  const claudeClient = createClaudeClient(env.ANTHROPIC_API_KEY);
+  const bot = createBot(env.BOT_TOKEN, env.AUTHORIZED_TELEGRAM_IDS);
 
-  // Comandos e callbacks específicos antes do handler de texto livre (catch-all),
-  // que já se protege contra mensagens de comando por garantia própria.
-  registrarHandlerMovimento(bot, db);
-  registrarHandlerAlerta(bot, db);
-  registrarHandlerConfirmacao(bot, db);
-  registrarHandlerContagem(bot, { claudeClient });
+  // Specific commands and callbacks before the free-text handler (catch-all), which
+  // also guards itself against command messages as a safety net.
+  registerMovementHandler(bot, db);
+  registerAlertHandler(bot, db);
+  registerConfirmationHandler(bot, db);
+  registerCountHandler(bot, { claudeClient });
 
-  const escalonamentoTimer = iniciarEscalonamento(bot, db, {
-    timeoutMinutos: env.ALERT_TIMEOUT_MINUTES,
-    responsavelTelegramId: env.RESPONSAVEL_ESCALONAMENTO_TELEGRAM_ID,
+  const escalationTimer = startEscalation(bot, db, {
+    timeoutMinutes: env.ALERT_TIMEOUT_MINUTES,
+    escalationContactTelegramId: env.ESCALATION_CONTACT_TELEGRAM_ID,
   });
 
-  const parar = (sinal: string) => {
-    clearInterval(escalonamentoTimer);
-    bot.stop(sinal);
+  const stop = (signal: string) => {
+    clearInterval(escalationTimer);
+    bot.stop(signal);
   };
-  process.once("SIGINT", () => parar("SIGINT"));
-  process.once("SIGTERM", () => parar("SIGTERM"));
+  process.once("SIGINT", () => stop("SIGINT"));
+  process.once("SIGTERM", () => stop("SIGTERM"));
 
   await bot.launch();
-  console.log("Bot iniciado.");
+  console.log("Bot started.");
 }
 
 main().catch((error) => {
-  console.error("Falha ao iniciar o bot:", error);
+  console.error("Failed to start the bot:", error);
   process.exit(1);
 });

@@ -2,65 +2,65 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-5";
 
-export function criarClaudeClient(apiKey: string): Anthropic {
+export function createClaudeClient(apiKey: string): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-const SYSTEM_PROMPT = `Você interpreta mensagens de contagem de estoque de uma hamburgueria (categoria Burgers),
-enviadas em texto livre por um colaborador via Telegram. O formato varia, mas normalmente é uma lista de
-"quantidade + código do insumo" separados por barra ou vírgula, ex.: "742 G / 689 F / 380 W / 9 PCT CHICKEN".
+const SYSTEM_PROMPT = `You interpret free-text stock count messages from an employee at a burger restaurant
+(Burgers category), sent via Telegram. The format varies, but it's usually a list of
+"quantity + supply code" separated by slashes or commas, e.g.: "742 G / 689 F / 380 W / 9 PCT CHICKEN".
 
-Extraia cada item da mensagem, preservando o código/nome do insumo exatamente como aparece no texto (não
-traduza nem normalize). Se o colaborador mencionar explicitamente a quantidade real de um pacote de
-quantidade variável (ex.: "abri o pacote de chicken e tinha 8.5"), preencha quantidadeReal para esse item;
-caso contrário deixe null. Não invente itens que não estão no texto.`;
+Extract each item from the message, preserving the supply code/name exactly as it appears in the text
+(do not translate or normalize it). If the employee explicitly mentions the actual quantity of a
+variable-quantity package (e.g., "opened the chicken package and it had 8.5"), fill in actualQuantity
+for that item; otherwise leave it null. Do not invent items that aren't in the text.`;
 
 const PARSE_TOOL = {
-  name: "registrar_itens_contagem",
-  description: "Registra os itens estruturados extraídos da mensagem de contagem em texto livre.",
+  name: "record_count_items",
+  description: "Records the structured items extracted from the free-text count message.",
   input_schema: {
     type: "object",
     properties: {
-      itens: {
+      items: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            insumo: {
+            supply: {
               type: "string",
-              description: "Código ou nome do insumo exatamente como aparece no texto (ex: G, F, W, PCT CHICKEN)",
+              description: "Supply code or name exactly as it appears in the text (e.g., G, F, W, PCT CHICKEN)",
             },
-            quantidade: {
+            quantity: {
               type: "number",
-              description: "Quantidade informada para esse insumo",
+              description: "Reported quantity for this supply",
             },
-            quantidadeReal: {
+            actualQuantity: {
               type: ["number", "null"],
               description:
-                "Quantidade real informada pelo colaborador ao abrir um pacote de quantidade variável, se mencionada explicitamente. null caso contrário.",
+                "Actual quantity reported by the employee when opening a variable-quantity package, if explicitly mentioned. null otherwise.",
             },
           },
-          required: ["insumo", "quantidade"],
+          required: ["supply", "quantity"],
         },
       },
     },
-    required: ["itens"],
+    required: ["items"],
   },
 } as const;
 
-export async function parseTextoContagem(client: Anthropic, textoBruto: string): Promise<unknown> {
-  const resposta = await client.messages.create({
+export async function requestStructuredParse(client: Anthropic, rawText: string): Promise<unknown> {
+  const response = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     tools: [PARSE_TOOL],
     tool_choice: { type: "tool", name: PARSE_TOOL.name },
-    messages: [{ role: "user", content: textoBruto }],
+    messages: [{ role: "user", content: rawText }],
   });
 
-  const blocoToolUse = resposta.content.find((bloco) => bloco.type === "tool_use");
-  if (!blocoToolUse || blocoToolUse.type !== "tool_use") {
-    throw new Error("O modelo não retornou uma chamada de ferramenta com o parse estruturado.");
+  const toolUseBlock = response.content.find((block) => block.type === "tool_use");
+  if (!toolUseBlock || toolUseBlock.type !== "tool_use") {
+    throw new Error("The model did not return a tool call with the structured parse.");
   }
-  return blocoToolUse.input;
+  return toolUseBlock.input;
 }
