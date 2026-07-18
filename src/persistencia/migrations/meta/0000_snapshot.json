@@ -1,0 +1,519 @@
+{
+  "id": "909ffeec-1d77-4e2c-8902-bb127fd3a5bb",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.alerta": {
+      "name": "alerta",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "contagem_id": {
+          "name": "contagem_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enviado_em": {
+          "name": "enviado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reconhecido": {
+          "name": "reconhecido",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "reconhecido_por": {
+          "name": "reconhecido_por",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reconhecido_em": {
+          "name": "reconhecido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "escalonado": {
+          "name": "escalonado",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "escalonado_para": {
+          "name": "escalonado_para",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "alerta_contagem_id_contagem_id_fk": {
+          "name": "alerta_contagem_id_contagem_id_fk",
+          "tableFrom": "alerta",
+          "tableTo": "contagem",
+          "columnsFrom": [
+            "contagem_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contagem": {
+      "name": "contagem",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "rotina_id": {
+          "name": "rotina_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "insumo_id": {
+          "name": "insumo_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "colaborador_telegram_id": {
+          "name": "colaborador_telegram_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "texto_bruto": {
+          "name": "texto_bruto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor_informado": {
+          "name": "valor_informado",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade_real_informada": {
+          "name": "quantidade_real_informada",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valor_esperado": {
+          "name": "valor_esperado",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bateu": {
+          "name": "bateu",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confirmado_pelo_colaborador": {
+          "name": "confirmado_pelo_colaborador",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "criado_em": {
+          "name": "criado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "contagem_rotina_id_rotina_id_fk": {
+          "name": "contagem_rotina_id_rotina_id_fk",
+          "tableFrom": "contagem",
+          "tableTo": "rotina",
+          "columnsFrom": [
+            "rotina_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "contagem_insumo_id_insumo_id_fk": {
+          "name": "contagem_insumo_id_insumo_id_fk",
+          "tableFrom": "contagem",
+          "tableTo": "insumo",
+          "columnsFrom": [
+            "insumo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.historico_movimento": {
+      "name": "historico_movimento",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "insumo_id": {
+          "name": "insumo_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "tipo_movimento",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade": {
+          "name": "quantidade",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origem": {
+          "name": "origem",
+          "type": "origem_movimento",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "registrado_em": {
+          "name": "registrado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "historico_movimento_insumo_id_insumo_id_fk": {
+          "name": "historico_movimento_insumo_id_insumo_id_fk",
+          "tableFrom": "historico_movimento",
+          "tableTo": "insumo",
+          "columnsFrom": [
+            "insumo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.insumo": {
+      "name": "insumo",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "loja_id": {
+          "name": "loja_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "categoria": {
+          "name": "categoria",
+          "type": "categoria_insumo",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unidade": {
+          "name": "unidade",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade_padrao_por_pacote": {
+          "name": "quantidade_padrao_por_pacote",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ativo": {
+          "name": "ativo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "insumo_loja_id_loja_id_fk": {
+          "name": "insumo_loja_id_loja_id_fk",
+          "tableFrom": "insumo",
+          "tableTo": "loja",
+          "columnsFrom": [
+            "loja_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.loja": {
+      "name": "loja",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telegram_group_id": {
+          "name": "telegram_group_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ativa": {
+          "name": "ativa",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rotina": {
+      "name": "rotina",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "loja_id": {
+          "name": "loja_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_verificacao": {
+          "name": "tipo_verificacao",
+          "type": "tipo_verificacao",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "frequencia": {
+          "name": "frequencia",
+          "type": "frequencia",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criticidade": {
+          "name": "criticidade",
+          "type": "criticidade",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ativa": {
+          "name": "ativa",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rotina_loja_id_loja_id_fk": {
+          "name": "rotina_loja_id_loja_id_fk",
+          "tableFrom": "rotina",
+          "tableTo": "loja",
+          "columnsFrom": [
+            "loja_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.categoria_insumo": {
+      "name": "categoria_insumo",
+      "schema": "public",
+      "values": [
+        "burger",
+        "queijo",
+        "molho",
+        "batata",
+        "flavors_house"
+      ]
+    },
+    "public.criticidade": {
+      "name": "criticidade",
+      "schema": "public",
+      "values": [
+        "baixa",
+        "media",
+        "alta"
+      ]
+    },
+    "public.frequencia": {
+      "name": "frequencia",
+      "schema": "public",
+      "values": [
+        "diaria",
+        "a_cada_n_dias",
+        "semanal",
+        "mensal"
+      ]
+    },
+    "public.origem_movimento": {
+      "name": "origem_movimento",
+      "schema": "public",
+      "values": [
+        "manual",
+        "3scheckout_api"
+      ]
+    },
+    "public.tipo_movimento": {
+      "name": "tipo_movimento",
+      "schema": "public",
+      "values": [
+        "recebimento",
+        "venda",
+        "desperdicio"
+      ]
+    },
+    "public.tipo_verificacao": {
+      "name": "tipo_verificacao",
+      "schema": "public",
+      "values": [
+        "numerica_esperada",
+        "binaria",
+        "faixa_valor",
+        "validade",
+        "foto_evidencia"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

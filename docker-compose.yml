@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chefbot
+      POSTGRES_PASSWORD: chefbot
+      POSTGRES_DB: chefbot
+    ports:
+      - "5433:5432"
+    volumes:
+      - chefbot_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chefbot -d chefbot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  chefbot_db_data:
