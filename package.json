@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "migrate": "tsx src/persistence/migrate.ts",
     "db:generate": "drizzle-kit generate",
     "seed": "tsx src/persistence/seed.ts"
