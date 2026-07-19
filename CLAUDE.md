@@ -44,9 +44,9 @@ docker compose up -d     # sobe Postgres + serviço em containers
 
 Nunca commitar tokens do bot, chaves de API ou credenciais de banco. Tudo via `.env` (já no `.gitignore`). Se encontrar um segredo hardcoded em qualquer arquivo, pare e avise antes de continuar.
 
-## Decisões em aberto (ver SPEC.md seção 5)
+## Decisões de arquitetura (ver SPEC.md seção 5)
 
-Várias decisões de arquitetura ainda estão marcadas como assumidas, não confirmadas: fluxo de confirmação do parse, escalonamento de alerta, escolha de Postgres, entidade `Loja` desde o MVP, tratamento de pacotes de quantidade variável. Não assumir que estão fechadas — confirmar com o humano antes de implementar a parte correspondente se houver qualquer dúvida.
+Confirmadas pelo humano em 2026-07-17 — D1 a D5 todas fechadas nas opções recomendadas: confirmação explícita do parse via LLM antes de comparar, escalonamento de alerta por DM após 15 min sem reconhecimento, Postgres via Docker, entidade `Loja` desde o MVP, e `quantidade_real_informada` como override pontual (não altera o padrão do Insumo). Pode implementar sem reconfirmar.
 
 ## Fora de escopo do MVP (não implementar sem pedido explícito)
 

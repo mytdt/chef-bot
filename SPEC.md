@@ -1,7 +1,7 @@
 # SPEC.md — MVP: Bot de Contagem de Carne (Bom Beef, loja 0032)
 
 > Spec técnica derivada de `plano_projeto_bot_rotinas.md`. Serve de referência para implementação via Claude Code.
-> Status: rascunho v1 — contém decisões assumidas que precisam de validação do humano (marcadas com ⚠️).
+> Status: v1 — decisões D1 a D5 (seção 5) confirmadas pelo humano em 2026-07-17. Pronta para implementação.
 
 ---
 
@@ -30,7 +30,7 @@ Automatizar de ponta a ponta o fluxo de contagem de carne que hoje é manual (Wh
 - **Runtime:** Node.js + TypeScript (strict mode).
 - **Bot:** Telegraf (lib já usada pelo Emanoel).
 - **Validação de entrada:** Zod para todos os payloads estruturados.
-- **Persistência:** banco relacional (⚠️ D3 — a definir: Postgres é a recomendação padrão para esse volume de dados e relações; confirmar com o humano se há preferência).
+- **Persistência:** Postgres via Docker (D3 — confirmado).
 - **Deploy:** Docker + docker-compose, portável (Railway/Vercel/etc.). Sem Terraform nesta fase.
 - **Segredos:** variáveis de ambiente (`.env`, nunca commitado — incluir no `.gitignore`).
 - **Interpretação de texto livre:** chamada a um modelo de linguagem (Claude via API) que recebe o texto do colaborador e retorna JSON estruturado, validado por um schema Zod antes de seguir para comparação.
@@ -38,7 +38,7 @@ Automatizar de ponta a ponta o fluxo de contagem de carne que hoje é manual (Wh
 ## 4. Modelo de domínio
 
 ### 4.1 Entidade `Loja`
-⚠️ **D4 (assumido):** incluir esta entidade desde o MVP, mesmo operando com uma loja só, para não exigir migração de schema quando o produto virar SaaS multi-franquia.
+D4 (confirmado): incluir esta entidade desde o MVP, mesmo operando com uma loja só, para não exigir migração de schema quando o produto virar SaaS multi-franquia.
 
 ```
 Loja {
@@ -86,7 +86,7 @@ Contagem {
   colaborador_telegram_id: string
   texto_bruto: string                  // mensagem original, sem alteração
   valor_informado: number
-  quantidade_real_informada: number | null   // ⚠️ D5 — override pontual quando o pacote tem qtd variável
+  quantidade_real_informada: number | null   // D5 (confirmado) — override pontual quando o pacote tem qtd variável
   valor_esperado: number                // calculado, nunca exposto ao colaborador
   bateu: boolean
   confirmado_pelo_colaborador: boolean  // ver D1 — fluxo de confirmação do parse
@@ -122,17 +122,17 @@ HistoricoMovimento {
 }
 ```
 
-## 5. Decisões assumidas — precisam de confirmação do humano
+## 5. Decisões confirmadas pelo humano (2026-07-17)
 
-| # | Decisão | Assumido para o MVP | Alternativa se rejeitado |
-|---|---|---|---|
-| D1 | Parse via LLM do texto livre precisa de confirmação explícita do colaborador ("Entendi: 742 G, 689 F... Confirma?") antes de rodar a comparação, para evitar erro silencioso na feature mais crítica. | Bot sempre confirma antes de comparar. | Comparar direto sem confirmação (mais rápido, mais arriscado). |
-| D2 | Alerta ao grupo tem um estado de reconhecimento; se ninguém reagir em N minutos (sugestão: 15 min), escala via DM para um responsável designado. | Implementar campo `reconhecido` + escalonamento simples por timeout. | Alerta único sem acompanhamento (mais simples, risco de virar ruído ignorado). |
-| D3 | Banco de dados relacional (Postgres). | Postgres via Docker. | SQLite para MVP ainda mais simples (não recomendado se a visão é multi-loja). |
-| D4 | Entidade `Loja` existe desde o MVP, mesmo com uma loja só. | Incluir desde já (custo baixo agora, evita migração dolorosa depois). | Omitir e adicionar quando houver 2ª loja. |
-| D5 | Pacotes de quantidade variável (Chicken, Vegetariano): colaborador informa a quantidade real ao abrir o pacote; isso vale **só para aquela contagem**, não altera o padrão do Insumo. | Campo `quantidade_real_informada` pontual. | Quantidade real vira o novo padrão automaticamente (mais simples, mas perigoso se for erro de digitação). |
+| # | Decisão | Confirmado para o MVP |
+|---|---|---|
+| D1 | Parse via LLM do texto livre precisa de confirmação explícita do colaborador ("Entendi: 742 G, 689 F... Confirma?") antes de rodar a comparação, para evitar erro silencioso na feature mais crítica. | ✅ Bot sempre confirma antes de comparar. |
+| D2 | Alerta ao grupo tem um estado de reconhecimento; se ninguém reagir em 15 minutos, escala via DM para um responsável designado. | ✅ Campo `reconhecido` + escalonamento simples por timeout de 15 min. |
+| D3 | Banco de dados relacional (Postgres). | ✅ Postgres via Docker. |
+| D4 | Entidade `Loja` existe desde o MVP, mesmo com uma loja só. | ✅ Incluída desde já. |
+| D5 | Pacotes de quantidade variável (Chicken, Vegetariano): colaborador informa a quantidade real ao abrir o pacote; isso vale **só para aquela contagem**, não altera o padrão do Insumo. | ✅ Campo `quantidade_real_informada` pontual. |
 
-**Antes de começar a implementação, o humano deve revisar esta tabela e marcar cada linha como ✅ confirmado ou ✏️ ajustar.**
+Todas as 5 decisões confirmadas nas opções originalmente assumidas — sem ajustes.
 
 ## 6. Regras de negócio centrais
 

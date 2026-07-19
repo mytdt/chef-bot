@@ -1,0 +1,62 @@
+import type { Context, Telegraf } from "telegraf";
+import { message } from "telegraf/filters";
+import type Anthropic from "@anthropic-ai/sdk";
+import { parseCountText } from "src/bot/parse.js";
+import { storePending } from "src/bot/pendingCounts.js";
+
+export interface CountHandlerDeps {
+  claudeClient: Anthropic;
+}
+
+function formatSummary(items: { supply: string; quantity: number; actualQuantity: number | null }[]): string {
+  return items
+    .map((item) => {
+      const actual = item.actualQuantity !== null ? ` (real informada: ${item.actualQuantity})` : "";
+      return `• ${item.supply}: ${item.quantity}${actual}`;
+    })
+    .join("\n");
+}
+
+/**
+ * D1: every count parsed via the LLM is summarized and waits for the collaborator's
+ * explicit confirmation before any calculation or comparison (see handlers/confirmation.ts).
+ */
+export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerDeps): void {
+  bot.on(message("text"), async (ctx) => {
+    const text = ctx.message.text;
+    if (text.startsWith("/")) {
+      return;
+    }
+
+    const collaboratorTelegramId = ctx.from.id.toString();
+
+    let parse;
+    try {
+      parse = await parseCountText(deps.claudeClient, text);
+    } catch (error) {
+      console.error("Failed to parse count via LLM:", error);
+      await ctx.reply(
+        "Não consegui interpretar essa contagem. Pode reenviar no formato usual (ex.: 742 G / 689 F / 380 W)?",
+      );
+      return;
+    }
+
+    const id = storePending({
+      chatId: ctx.chat.id,
+      collaboratorTelegramId,
+      rawText: text,
+      parse,
+    });
+
+    await ctx.reply(`Entendi:\n${formatSummary(parse.items)}\n\nConfirma?`, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Confirmar", callback_data: `confirm:${id}` },
+            { text: "✏️ Corrigir", callback_data: `correct:${id}` },
+          ],
+        ],
+      },
+    });
+  });
+}
