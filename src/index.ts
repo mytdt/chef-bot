@@ -7,12 +7,20 @@ import { registerAlertHandler } from "src/bot/handlers/alert.js";
 import { registerConfirmationHandler } from "src/bot/handlers/confirmation.js";
 import { registerCountHandler } from "src/bot/handlers/count.js";
 import { startEscalation } from "src/alerts/escalation.js";
+import * as storeRepo from "src/persistence/repositories/storeRepo.js";
 
 async function main() {
   const env = loadEnv();
   const db = createDb({ DATABASE_URL: env.DATABASE_URL });
   const claudeClient = createClaudeClient(env.ANTHROPIC_API_KEY);
-  const bot = createBot(env.BOT_TOKEN, env.AUTHORIZED_TELEGRAM_IDS);
+
+  // D9: authorization is by Telegram group (store.telegramGroupId), not an individual
+  // allowlist — the active store must be known before the bot (and its middleware) exist.
+  const activeStore = await storeRepo.findActiveStore(db);
+  if (!activeStore) {
+    throw new Error("No active store found — run the seed before starting the bot.");
+  }
+  const bot = createBot(env.BOT_TOKEN, activeStore.telegramGroupId);
 
   // Specific commands and callbacks before the free-text handler (catch-all), which
   // also guards itself against command messages as a safety net.
