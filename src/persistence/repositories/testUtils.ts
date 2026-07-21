@@ -27,7 +27,7 @@ export async function createTestStore(db: Db, overrides: Partial<typeof store.$i
 export async function createTestSupply(db: Db, storeId: string, overrides: Partial<typeof supply.$inferInsert> = {}) {
   const [created] = await db
     .insert(supply)
-    .values({ storeId, category: "burger", name: "Test Supply", unit: "unidade", active: true, ...overrides })
+    .values({ storeId, category: "burger", code: "TEST", name: "Test Supply", unit: "unidade", active: true, ...overrides })
     .returning();
   if (!created) throw new Error("Failed to create test supply.");
   return created;

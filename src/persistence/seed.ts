@@ -45,35 +45,39 @@ async function main() {
     console.log(`Routine '${ROUTINE_NAME}' already existed.`);
   }
 
-  // PLACEHOLDER: the real codes used in the free-text message (e.g., G, F, W from the
-  // SPEC example "742 G / 689 F / 380 W") haven't been provided yet — fill in the real
-  // name/unit/defaultPackageQuantity before running the real E2E flow.
-  const placeholderSupplies = [
-    { name: "PLACEHOLDER_SUPPLY_G", unit: "unidade", defaultPackageQuantity: null },
-    { name: "PLACEHOLDER_SUPPLY_F", unit: "unidade", defaultPackageQuantity: null },
-    { name: "PLACEHOLDER_SUPPLY_W", unit: "unidade", defaultPackageQuantity: null },
+  // Real names confirmed by Emanoel (2026-07-19), cross-checked against the PRODUCT_MAP
+  // in bbb-protein-consumption (companion tool, same team, reused with permission):
+  // F/G/W are the short codes collaborators actually type in free-text counts.
+  // PENDING: "Chori" also exists as a protein category in bbb-protein-consumption's
+  // PRODUCT_MAP (12 product codes) but isn't confirmed as part of this counting routine
+  // yet, nor its free-text code — not seeded until confirmed, to avoid guessing.
+  const realSupplies = [
+    { code: "F", name: "Burger de 90g", unit: "unidade", defaultPackageQuantity: null },
+    { code: "G", name: "Burger de 160g", unit: "unidade", defaultPackageQuantity: null },
+    { code: "W", name: "Burger de Wagyu de 200g", unit: "unidade", defaultPackageQuantity: null },
     // Chicken and Vegetariano: variable-quantity packages (D5) — defaultPackageQuantity
-    // is null by design, not a placeholder to fill in. Names/units stay in Portuguese:
-    // this is seed *data* (product info the team recognizes in bot messages), not code.
-    { name: "Chicken", unit: "pacote", defaultPackageQuantity: null },
-    { name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null },
+    // is null by design. Names/units stay in Portuguese: this is seed *data* (product
+    // info the team recognizes in bot messages), not code.
+    { code: "Chicken", name: "Chicken", unit: "pacote", defaultPackageQuantity: null },
+    { code: "Vegetariano", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null },
   ];
 
-  for (const supplyData of placeholderSupplies) {
-    const [existing] = await db.select().from(supply).where(eq(supply.name, supplyData.name)).limit(1);
+  for (const supplyData of realSupplies) {
+    const [existing] = await db.select().from(supply).where(eq(supply.code, supplyData.code)).limit(1);
     if (existing) {
-      console.log(`Supply already existed: ${supplyData.name}`);
+      console.log(`Supply already existed: ${supplyData.code}`);
       continue;
     }
     await db.insert(supply).values({
       storeId: storeFound.id,
       category: "burger",
+      code: supplyData.code,
       name: supplyData.name,
       unit: supplyData.unit,
       defaultPackageQuantity: supplyData.defaultPackageQuantity,
       active: true,
     });
-    console.log(`Supply created: ${supplyData.name}`);
+    console.log(`Supply created: ${supplyData.code} (${supplyData.name})`);
   }
 
   console.log("Seed complete.");

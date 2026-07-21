@@ -35,7 +35,7 @@ export async function processCountItem(
 ): Promise<ProcessCountItemResult> {
   const { storeId, routineId, collaboratorTelegramId, rawText, item } = params;
 
-  const supplyFound = await supplyRepo.findByName(db, storeId, item.supply);
+  const supplyFound = await supplyRepo.findByCode(db, storeId, item.supply);
   if (!supplyFound) {
     return { supplyTextOriginal: item.supply, found: false };
   }

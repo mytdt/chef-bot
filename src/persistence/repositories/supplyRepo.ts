@@ -8,11 +8,23 @@ export async function findById(db: Db, id: string) {
   return found ?? null;
 }
 
+// Used by manual movement commands (/recebimento, /venda, /desperdicio), where staff type
+// the friendly display name.
 export async function findByName(db: Db, storeId: string, name: string) {
   const [found] = await db
     .select()
     .from(supply)
     .where(and(eq(supply.storeId, storeId), ilike(supply.name, name), eq(supply.active, true)))
+    .limit(1);
+  return found ?? null;
+}
+
+// Used by the LLM-parsed count flow, where the raw text carries the short code (e.g. "G").
+export async function findByCode(db: Db, storeId: string, code: string) {
+  const [found] = await db
+    .select()
+    .from(supply)
+    .where(and(eq(supply.storeId, storeId), ilike(supply.code, code), eq(supply.active, true)))
     .limit(1);
   return found ?? null;
 }

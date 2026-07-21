@@ -46,6 +46,10 @@ export const supply = pgTable("supply", {
     .notNull()
     .references(() => store.id),
   category: supplyCategoryEnum("category").notNull(),
+  // Short token collaborators actually type in free-text counts (e.g. "G", "F", "W") —
+  // distinct from `name`, the human-readable display name (e.g. "Burger de 160g").
+  // The LLM-parsed count flow matches on `code`; manual movement commands match on `name`.
+  code: text("code").notNull(),
   name: text("name").notNull(),
   unit: text("unit").notNull(),
   defaultPackageQuantity: quantity("default_package_quantity"),
