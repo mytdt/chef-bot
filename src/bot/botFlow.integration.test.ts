@@ -111,7 +111,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("replies 'tudo certo' and does not post an alert when the count matches the expected value", async () => {
     const testStore = await createTestStore(db);
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    const testSupply = await createTestSupply(db, testStore.id, { name: "TestBurger" });
+    const testSupply = await createTestSupply(db, testStore.id, { code: "TestBurger", name: "TestBurger" });
     await inventoryMovementRepo.insert(db, { supplyId: testSupply.id, type: "receipt", quantity: 100 });
 
     const bot = createBot("fake-token", [String(COLLABORATOR_ID)]);
@@ -134,7 +134,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("posts an alert to the store group and does not reveal the expected value when the count doesn't match", async () => {
     const testStore = await createTestStore(db);
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { name: "TestBurger2" });
+    await createTestSupply(db, testStore.id, { code: "TestBurger2", name: "TestBurger2" });
     // No movements recorded -> expected value is 0; reporting 50 is a mismatch.
 
     const bot = createBot("fake-token", [String(COLLABORATOR_ID)]);
@@ -164,7 +164,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("marks the alert as acknowledged when the 'Reconheço' button is pressed", async () => {
     const testStore = await createTestStore(db);
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { name: "TestBurger3" });
+    await createTestSupply(db, testStore.id, { code: "TestBurger3", name: "TestBurger3" });
 
     const bot = createBot("fake-token", [String(COLLABORATOR_ID)]);
     const calls = stubTelegramApi();

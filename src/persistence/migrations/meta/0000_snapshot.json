@@ -1,5 +1,5 @@
 {
-  "id": "47493a02-384f-4e2c-bdc5-bb64519e0664",
+  "id": "228c9a75-96df-4b3b-a210-6bc097f6bd14",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -394,6 +394,12 @@
           "name": "category",
           "type": "supply_category",
           "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
