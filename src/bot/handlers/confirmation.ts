@@ -47,6 +47,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
         routineId: routine.id,
         collaboratorTelegramId: pendingCount.collaboratorTelegramId,
         rawText: pendingCount.rawText,
+        llmUsed: pendingCount.llmUsed,
         item,
       });
 

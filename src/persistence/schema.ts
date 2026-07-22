@@ -27,6 +27,10 @@ export const movementTypeEnum = pgEnum("movement_type", ["receipt", "sale", "was
 
 export const movementSourceEnum = pgEnum("movement_source", ["manual", "3scheckout_api", "xml_drive"]);
 
+// C5/D10: which LLM produced the structured parse — "claude" is primary, "gemini" only
+// appears when the fallback kicked in (timeout/5xx/429 from Claude).
+export const llmProviderEnum = pgEnum("llm_provider", ["claude", "gemini"]);
+
 // doublePrecision (not integer) because supplies can be counted in fractional units
 // (kg, liters) for some categories. Burgers specifically are always whole units —
 // that invariant is enforced at the input boundary (domain/quantityRules.ts), not
@@ -84,20 +88,19 @@ export const count = pgTable("count", {
   expectedValue: quantity("expected_value").notNull(),
   matched: boolean("matched").notNull(),
   confirmedByCollaborator: boolean("confirmed_by_collaborator").notNull().default(false),
+  llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// C6: alert is a one-shot notification to the group — no acknowledgment/escalation
+// state (removed, amends D2/D12). Kept as a table (not just a sent message) purely as
+// an audit trail of which counts triggered a mismatch notification.
 export const alert = pgTable("alert", {
   id: uuid("id").primaryKey().defaultRandom(),
   countId: uuid("count_id")
     .notNull()
     .references(() => count.id),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
-  acknowledged: boolean("acknowledged").notNull().default(false),
-  acknowledgedBy: text("acknowledged_by"),
-  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
-  escalated: boolean("escalated").notNull().default(false),
-  escalatedTo: text("escalated_to"),
 });
 
 export const inventoryMovement = pgTable("inventory_movement", {

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { ParsedCount } from "src/bot/parse.schema.js";
+import type { LlmProvider } from "src/domain/types.js";
 
 export interface PendingCount {
   chatId: number;
   collaboratorTelegramId: string;
   rawText: string;
   parse: ParsedCount;
+  llmUsed: LlmProvider;
 }
 
 // In-memory (not persisted) state of the parse awaiting collaborator confirmation (D1).

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { LLMParser } from "src/llm/llmParser.js";
 
 const MODEL = "claude-sonnet-5";
 
@@ -63,4 +64,29 @@ export async function requestStructuredParse(client: Anthropic, rawText: string)
     throw new Error("The model did not return a tool call with the structured parse.");
   }
   return toolUseBlock.input;
+}
+
+export function createClaudeParser(apiKey: string): LLMParser {
+  const client = createClaudeClient(apiKey);
+  return {
+    async parse(rawText: string) {
+      const data = await requestStructuredParse(client, rawText);
+      return { data, provider: "claude" };
+    },
+  };
+}
+
+/**
+ * C5/D10: the fallback to Gemini triggers on timeout, 5xx, or rate limiting (429) —
+ * anything else (bad request, auth failure, content parse issue) is a real error that
+ * retrying with a different model wouldn't fix, so it's surfaced as-is.
+ */
+export function isRetryableClaudeError(error: unknown): boolean {
+  if (error instanceof Anthropic.APIConnectionTimeoutError) {
+    return true;
+  }
+  if (error instanceof Anthropic.APIError && typeof error.status === "number") {
+    return error.status === 429 || error.status >= 500;
+  }
+  return false;
 }

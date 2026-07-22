@@ -36,53 +36,23 @@ async function createTestCount(storeId: string) {
 }
 
 describe("alertRepo", () => {
-  it("creates an alert unacknowledged and unescalated by default", async () => {
+  it("creates an alert record for a count, as an audit trail (C6: no ack/escalation state)", async () => {
     const testStore = await createTestStore(db);
     const testCount = await createTestCount(testStore.id);
 
     const created = await alertRepo.insert(db, testCount.id);
 
-    expect(created.acknowledged).toBe(false);
-    expect(created.escalated).toBe(false);
+    expect(created.countId).toBe(testCount.id);
+    expect(created.sentAt).not.toBeNull();
   });
 
-  it("marks an alert as acknowledged with who and when", async () => {
+  it("finds an alert by id", async () => {
     const testStore = await createTestStore(db);
     const testCount = await createTestCount(testStore.id);
     const created = await alertRepo.insert(db, testCount.id);
-
-    await alertRepo.markAcknowledged(db, created.id, "9999");
 
     const found = await alertRepo.findById(db, created.id);
-    expect(found?.acknowledged).toBe(true);
-    expect(found?.acknowledgedBy).toBe("9999");
-    expect(found?.acknowledgedAt).not.toBeNull();
-  });
 
-  it("marks an alert as escalated with the escalation target", async () => {
-    const testStore = await createTestStore(db);
-    const testCount = await createTestCount(testStore.id);
-    const created = await alertRepo.insert(db, testCount.id);
-
-    await alertRepo.markEscalated(db, created.id, "responsible-id");
-
-    const found = await alertRepo.findById(db, created.id);
-    expect(found?.escalated).toBe(true);
-    expect(found?.escalatedTo).toBe("responsible-id");
-  });
-
-  it("lists only alerts that are neither acknowledged nor escalated", async () => {
-    const testStore = await createTestStore(db);
-
-    const pending = await alertRepo.insert(db, (await createTestCount(testStore.id)).id);
-    const acknowledged = await alertRepo.insert(db, (await createTestCount(testStore.id)).id);
-    const escalated = await alertRepo.insert(db, (await createTestCount(testStore.id)).id);
-
-    await alertRepo.markAcknowledged(db, acknowledged.id, "9999");
-    await alertRepo.markEscalated(db, escalated.id, "responsible-id");
-
-    const pendingList = await alertRepo.listPendingEscalation(db);
-
-    expect(pendingList.map((a) => a.id)).toEqual([pending.id]);
+    expect(found?.id).toBe(created.id);
   });
 });

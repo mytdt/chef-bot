@@ -1,5 +1,6 @@
 import type { Db } from "src/persistence/db.js";
 import type { CountItem } from "src/bot/parse.schema.js";
+import type { LlmProvider } from "src/domain/types.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as countRepo from "src/persistence/repositories/countRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
@@ -30,10 +31,11 @@ export async function processCountItem(
     routineId: string;
     collaboratorTelegramId: string;
     rawText: string;
+    llmUsed: LlmProvider;
     item: CountItem;
   },
 ): Promise<ProcessCountItemResult> {
-  const { storeId, routineId, collaboratorTelegramId, rawText, item } = params;
+  const { storeId, routineId, collaboratorTelegramId, rawText, llmUsed, item } = params;
 
   const supplyFound = await supplyRepo.findByCode(db, storeId, item.supply);
   if (!supplyFound) {
@@ -83,6 +85,7 @@ export async function processCountItem(
     expectedValue,
     matched,
     confirmedByCollaborator: true,
+    llmUsed,
   });
 
   return {

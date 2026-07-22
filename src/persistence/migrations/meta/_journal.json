@@ -22,6 +22,20 @@
       "when": 1784731570060,
       "tag": "0002_living_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784745882647,
+      "tag": "0003_luxuriant_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784746209925,
+      "tag": "0004_bouncy_ego",
+      "breakpoints": true
     }
   ]
 }

@@ -9,3 +9,7 @@ export type Criticality = "low" | "medium" | "high";
 export type MovementType = "receipt" | "sale" | "waste";
 
 export type MovementSource = "manual" | "3scheckout_api" | "xml_drive";
+
+// C5/D10: which LLM actually produced the structured parse for a given Count —
+// "claude" is primary, "gemini" only appears when the fallback kicked in.
+export type LlmProvider = "claude" | "gemini";

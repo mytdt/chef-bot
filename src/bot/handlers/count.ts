@@ -1,11 +1,11 @@
 import type { Context, Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMParser } from "src/llm/llmParser.js";
 import { parseCountText } from "src/bot/parse.js";
 import { storePending } from "src/bot/pendingCounts.js";
 
 export interface CountHandlerDeps {
-  claudeClient: Anthropic;
+  llmParser: LLMParser;
 }
 
 function formatSummary(items: { supply: string; quantity: number; actualQuantity: number | null }[]): string {
@@ -30,9 +30,9 @@ export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerD
 
     const collaboratorTelegramId = ctx.from.id.toString();
 
-    let parse;
+    let parseResult;
     try {
-      parse = await parseCountText(deps.claudeClient, text);
+      parseResult = await parseCountText(deps.llmParser, text);
     } catch (error) {
       console.error("Failed to parse count via LLM:", error);
       await ctx.reply(
@@ -45,10 +45,11 @@ export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerD
       chatId: ctx.chat.id,
       collaboratorTelegramId,
       rawText: text,
-      parse,
+      parse: parseResult.parse,
+      llmUsed: parseResult.llmUsed,
     });
 
-    await ctx.reply(`Entendi:\n${formatSummary(parse.items)}\n\nConfirma?`, {
+    await ctx.reply(`Entendi:\n${formatSummary(parseResult.parse.items)}\n\nConfirma?`, {
       reply_markup: {
         inline_keyboard: [
           [

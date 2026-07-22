@@ -1,12 +1,10 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Anthropic } from "@anthropic-ai/sdk";
 import { Telegram } from "telegraf";
 import type { Update } from "telegraf/types";
+import type { LLMParser } from "src/llm/llmParser.js";
 import { createBot } from "src/bot/telegram.js";
 import { registerCountHandler } from "src/bot/handlers/count.js";
 import { registerConfirmationHandler } from "src/bot/handlers/confirmation.js";
-import { registerAlertHandler } from "src/bot/handlers/alert.js";
-import * as alertRepo from "src/persistence/repositories/alertRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
 import {
   createTestRoutine,
@@ -34,18 +32,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Fake Anthropic client: parseCountText only ever calls .messages.create() and reads a
-// tool_use block from the response, so a minimal stub is enough to exercise the real
-// bot/parse.ts + Zod validation without hitting the real API. `as unknown as Anthropic`
-// is justified — building a fully-typed SDK client for a test double isn't practical.
-function fakeClaudeClient(items: { supply: string; quantity: number; actualQuantity?: number | null }[]): Anthropic {
+// Fake LLMParser: exercises the real bot/parse.ts + Zod validation without hitting any
+// real LLM API (Claude or Gemini) — see llm/llmParser.ts for the interface.
+function fakeLlmParser(items: { supply: string; quantity: number; actualQuantity?: number | null }[]): LLMParser {
   return {
-    messages: {
-      create: vi.fn().mockResolvedValue({
-        content: [{ type: "tool_use", input: { items } }],
-      }),
-    },
-  } as unknown as Anthropic;
+    parse: vi.fn().mockResolvedValue({ data: { items }, provider: "claude" }),
+  };
 }
 
 // Records every outbound Telegram API call instead of hitting the network, and returns
@@ -116,9 +108,8 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { claudeClient: fakeClaudeClient([{ supply: "TestBurger", quantity: 100 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger", quantity: 100 }]) });
     registerConfirmationHandler(bot, db);
-    registerAlertHandler(bot, db);
 
     await bot.handleUpdate(textMessageUpdate("100 TestBurger", 555));
     const confirmData = callbackDataFromLastReply(calls);
@@ -139,9 +130,8 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { claudeClient: fakeClaudeClient([{ supply: "TestBurger2", quantity: 50 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger2", quantity: 50 }]) });
     registerConfirmationHandler(bot, db);
-    registerAlertHandler(bot, db);
 
     await bot.handleUpdate(textMessageUpdate("50 TestBurger2", 555));
     const confirmData = callbackDataFromLastReply(calls);
@@ -153,38 +143,10 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     );
     expect(groupAlert).toBeDefined();
     expect(groupAlert?.payload.text).not.toMatch(/\b0\b/); // expected value (0) never appears in the alert text
+    // C6: the alert is a one-shot message — no acknowledge button.
+    expect(groupAlert?.payload.reply_markup).toBeUndefined();
 
     const confirmationReply = calls.filter((c) => c.method === "sendMessage").at(-1);
     expect(confirmationReply?.payload.text).toContain("Alerta enviado ao grupo");
-
-    const pendingAlerts = await alertRepo.listPendingEscalation(db);
-    expect(pendingAlerts).toHaveLength(1);
-  });
-
-  it("marks the alert as acknowledged when the 'Reconheço' button is pressed", async () => {
-    const testStore = await createTestStore(db, { telegramGroupId: "555" });
-    await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { code: "TestBurger3", name: "TestBurger3" });
-
-    const bot = createBot("fake-token", "555");
-    const calls = stubTelegramApi();
-    registerCountHandler(bot, { claudeClient: fakeClaudeClient([{ supply: "TestBurger3", quantity: 999 }]) });
-    registerConfirmationHandler(bot, db);
-    registerAlertHandler(bot, db);
-
-    await bot.handleUpdate(textMessageUpdate("999 TestBurger3", 555));
-    await bot.handleUpdate(callbackQueryUpdate(callbackDataFromLastReply(calls), 555));
-
-    const groupAlertCall = calls.find(
-      (c) => c.method === "sendMessage" && typeof c.payload.text === "string" && c.payload.text.includes("@all"),
-    );
-    const markup = groupAlertCall?.payload.reply_markup as { inline_keyboard: { callback_data: string }[][] };
-    const acknowledgeData = markup.inline_keyboard[0]?.[0]?.callback_data;
-    expect(acknowledgeData).toMatch(/^acknowledge:/);
-
-    await bot.handleUpdate(callbackQueryUpdate(acknowledgeData as string, 555));
-
-    const pendingAlerts = await alertRepo.listPendingEscalation(db);
-    expect(pendingAlerts).toHaveLength(0);
   });
 });
