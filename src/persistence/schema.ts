@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   doublePrecision,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -56,6 +57,11 @@ export const supply = pgTable("supply", {
   name: text("name").notNull(),
   unit: text("unit").notNull(),
   defaultPackageQuantity: quantity("default_package_quantity"),
+  // B5: fixed master data for converting a receiving note's boxes (NFe mod 55, `uCom:
+  // "CX"`) into the same units used elsewhere (F=54, G=36, W=30, confirmed 22/07) — not
+  // derived from free-text product parsing, which is fragile. Null for supplies that
+  // aren't received by the box (e.g. Chicken/Vegetariano, D5 variable-quantity packages).
+  unitsPerBox: integer("units_per_box"),
   active: boolean("active").notNull().default(true),
 });
 

@@ -50,23 +50,33 @@ async function main() {
   // permission). F/G/W/CHICKEN/CHORI/VEGETARIANO are the exact codes collaborators type
   // in free-text counts.
   const realSupplies = [
-    { code: "F", name: "Burger de 90g", unit: "unidade", defaultPackageQuantity: null },
-    { code: "G", name: "Burger de 160g", unit: "unidade", defaultPackageQuantity: null },
-    { code: "W", name: "Burger de Wagyu de 200g", unit: "unidade", defaultPackageQuantity: null },
+    // unitsPerBox (B5, confirmed 22/07): fixed conversion factor for receiving notes
+    // (NFe modelo 55, quantity in boxes) — null where receipt-by-box doesn't apply.
+    { code: "F", name: "Burger de 90g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 54 },
+    { code: "G", name: "Burger de 160g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 36 },
+    { code: "W", name: "Burger de Wagyu de 200g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 30 },
     // Assumed fixed-quantity like F/G/W (no D5 variable-quantity flag was given for it) —
     // flag this to Emanoel if that assumption is wrong.
-    { code: "CHORI", name: "Chori Burguer", unit: "unidade", defaultPackageQuantity: null },
+    { code: "CHORI", name: "Chori Burguer", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: null },
     // Chicken and Vegetariano: variable-quantity packages (D5) — defaultPackageQuantity
     // is null by design. Names/units stay in Portuguese: this is seed *data* (product
     // info the team recognizes in bot messages), not code.
-    { code: "CHICKEN", name: "Chicken", unit: "pacote", defaultPackageQuantity: null },
-    { code: "VEGETARIANO", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null },
+    { code: "CHICKEN", name: "Chicken", unit: "pacote", defaultPackageQuantity: null, unitsPerBox: null },
+    { code: "VEGETARIANO", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null, unitsPerBox: null },
   ];
 
   for (const supplyData of realSupplies) {
     const [existing] = await db.select().from(supply).where(eq(supply.code, supplyData.code)).limit(1);
     if (existing) {
-      console.log(`Supply already existed: ${supplyData.code}`);
+      // unitsPerBox is master data added after some supplies may already have been
+      // seeded (B5) — kept in sync on every seed run instead of only at creation time,
+      // same idempotent spirit as the rest of this script.
+      if (existing.unitsPerBox !== supplyData.unitsPerBox) {
+        await db.update(supply).set({ unitsPerBox: supplyData.unitsPerBox }).where(eq(supply.id, existing.id));
+        console.log(`Supply updated: ${supplyData.code} (unitsPerBox -> ${supplyData.unitsPerBox})`);
+      } else {
+        console.log(`Supply already existed: ${supplyData.code}`);
+      }
       continue;
     }
     await db.insert(supply).values({
@@ -76,6 +86,7 @@ async function main() {
       name: supplyData.name,
       unit: supplyData.unit,
       defaultPackageQuantity: supplyData.defaultPackageQuantity,
+      unitsPerBox: supplyData.unitsPerBox,
       active: true,
     });
     console.log(`Supply created: ${supplyData.code} (${supplyData.name})`);
