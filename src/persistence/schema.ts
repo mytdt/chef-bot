@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -109,3 +110,23 @@ export const inventoryMovement = pgTable("inventory_movement", {
   source: movementSourceEnum("source").notNull().default("manual"),
   recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// B3: tracks which Drive files (by their stable Drive file id) have already been
+// ingested, so re-running the daily ingestion (D11: manual trigger, no scheduler) never
+// double-counts InventoryMovement rows. Identity-based (by file id), not content-based —
+// two different NFC-e documents can legitimately produce identical movement rows (same
+// product, same quantity, same day), so only "was this exact file processed before" is a
+// sound idempotency check. The unique constraint enforces this at the DB level too, not
+// just in application logic.
+export const processedSalesFile = pgTable(
+  "processed_sales_file",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storeId: uuid("store_id")
+      .notNull()
+      .references(() => store.id),
+    driveFileId: text("drive_file_id").notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.storeId, table.driveFileId)],
+);

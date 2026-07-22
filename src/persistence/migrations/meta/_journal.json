@@ -15,6 +15,13 @@
       "when": 1784687615870,
       "tag": "0001_bright_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784731570060,
+      "tag": "0002_living_genesis",
+      "breakpoints": true
     }
   ]
 }
