@@ -5,7 +5,6 @@ const envSchema = z.object({
   BOT_TOKEN: z.string().min(1, "BOT_TOKEN is required"),
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  ESCALATION_CONTACT_TELEGRAM_ID: z.string().min(1, "ESCALATION_CONTACT_TELEGRAM_ID is required"),
   // Optional (Módulo B / B2): not required yet because nothing in the current boot
   // path (index.ts) consumes them — the Google Drive ingestion isn't wired into the
   // running bot until B3. Making them required here would break `bot.launch()` for
@@ -24,7 +23,6 @@ export type Env = {
   BOT_TOKEN: string;
   ANTHROPIC_API_KEY: string;
   DATABASE_URL: string;
-  ESCALATION_CONTACT_TELEGRAM_ID: string;
   GOOGLE_SERVICE_ACCOUNT_KEY?: string;
   GOOGLE_DRIVE_ROOT_FOLDER_ID?: string;
   ALERT_TIMEOUT_MINUTES: number;
