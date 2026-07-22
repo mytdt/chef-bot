@@ -37,11 +37,16 @@ export function filterAlertsToEscalate<T extends AlertPendingEscalation>(
  * `intervalMs` (60s by default) instead of scheduling a timer per alert, because
  * "when to escalate" is derived only from `sentAt` — it survives a process restart,
  * unlike an individual setTimeout per alert.
+ *
+ * D12 (2026-07-21, amends D2): escalation is no longer a DM to a designated contact —
+ * it's a follow-up message in the same group as the original alert, reinforcing it.
+ * D9 already made the group the unit of who's authorized to act, so a single fixed
+ * escalation contact stopped making sense as a separate concept.
  */
 export function startEscalation(
   bot: Telegraf<Context>,
   db: Db,
-  params: { timeoutMinutes: number; escalationContactTelegramId: string; intervalMs?: number },
+  params: { timeoutMinutes: number; groupId: string; intervalMs?: number },
 ): NodeJS.Timeout {
   const intervalMs = params.intervalMs ?? 60_000;
 
@@ -55,11 +60,11 @@ export function startEscalation(
         const relatedSupply = relatedCount ? await supplyRepo.findById(db, relatedCount.supplyId) : null;
 
         await bot.telegram.sendMessage(
-          params.escalationContactTelegramId,
-          `🚨 O alerta de contagem${relatedSupply ? ` de "${relatedSupply.name}"` : ""} não foi reconhecido em ${params.timeoutMinutes} min. Confira o grupo.`,
+          params.groupId,
+          `⏰ O alerta de contagem${relatedSupply ? ` de "${relatedSupply.name}"` : ""} ainda não foi reconhecido (${params.timeoutMinutes} min). Alguém confirme, por favor.`,
         );
 
-        await alertRepo.markEscalated(db, pendingAlert.id, params.escalationContactTelegramId);
+        await alertRepo.markEscalated(db, pendingAlert.id, params.groupId);
       }
     } catch (error) {
       console.error("Failed to check alert escalation:", error);

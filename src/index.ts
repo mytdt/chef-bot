@@ -31,7 +31,7 @@ async function main() {
 
   const escalationTimer = startEscalation(bot, db, {
     timeoutMinutes: env.ALERT_TIMEOUT_MINUTES,
-    escalationContactTelegramId: env.ESCALATION_CONTACT_TELEGRAM_ID,
+    groupId: activeStore.telegramGroupId,
   });
 
   const stop = (signal: string) => {
