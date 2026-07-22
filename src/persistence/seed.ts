@@ -6,8 +6,8 @@ import { supply, store, routine } from "src/persistence/schema.js";
 const STORE_NAME = "Bom Beef 0032";
 const ROUTINE_NAME = "Contagem de Carne";
 
-// PLACEHOLDER: fill in with the real telegram_group_id of the staging/production group before the E2E run.
-const TELEGRAM_GROUP_ID_PLACEHOLDER = "PLACEHOLDER_TELEGRAM_GROUP_ID_FILL_IN";
+// Real staging group id, confirmed by Emanoel (2026-07-21).
+const TELEGRAM_GROUP_ID = "5107923619";
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -20,7 +20,7 @@ async function main() {
   if (!storeFound) {
     [storeFound] = await db
       .insert(store)
-      .values({ name: STORE_NAME, telegramGroupId: TELEGRAM_GROUP_ID_PLACEHOLDER, active: true })
+      .values({ name: STORE_NAME, telegramGroupId: TELEGRAM_GROUP_ID, active: true })
       .returning();
     console.log(`Store created: ${storeFound?.id}`);
   } else {
@@ -45,21 +45,22 @@ async function main() {
     console.log(`Routine '${ROUTINE_NAME}' already existed.`);
   }
 
-  // Real names confirmed by Emanoel (2026-07-19), cross-checked against the PRODUCT_MAP
-  // in bbb-protein-consumption (companion tool, same team, reused with permission):
-  // F/G/W are the short codes collaborators actually type in free-text counts.
-  // PENDING: "Chori" also exists as a protein category in bbb-protein-consumption's
-  // PRODUCT_MAP (12 product codes) but isn't confirmed as part of this counting routine
-  // yet, nor its free-text code — not seeded until confirmed, to avoid guessing.
+  // Real names confirmed by Emanoel (2026-07-19 and 2026-07-21), cross-checked against
+  // the PRODUCT_MAP in bbb-protein-consumption (companion tool, same team, reused with
+  // permission). F/G/W/CHICKEN/CHORI/VEGETARIANO are the exact codes collaborators type
+  // in free-text counts.
   const realSupplies = [
     { code: "F", name: "Burger de 90g", unit: "unidade", defaultPackageQuantity: null },
     { code: "G", name: "Burger de 160g", unit: "unidade", defaultPackageQuantity: null },
     { code: "W", name: "Burger de Wagyu de 200g", unit: "unidade", defaultPackageQuantity: null },
+    // Assumed fixed-quantity like F/G/W (no D5 variable-quantity flag was given for it) —
+    // flag this to Emanoel if that assumption is wrong.
+    { code: "CHORI", name: "Chori Burguer", unit: "unidade", defaultPackageQuantity: null },
     // Chicken and Vegetariano: variable-quantity packages (D5) — defaultPackageQuantity
     // is null by design. Names/units stay in Portuguese: this is seed *data* (product
     // info the team recognizes in bot messages), not code.
-    { code: "Chicken", name: "Chicken", unit: "pacote", defaultPackageQuantity: null },
-    { code: "Vegetariano", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null },
+    { code: "CHICKEN", name: "Chicken", unit: "pacote", defaultPackageQuantity: null },
+    { code: "VEGETARIANO", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null },
   ];
 
   for (const supplyData of realSupplies) {
