@@ -24,7 +24,7 @@ export const criticalityEnum = pgEnum("criticality", ["low", "medium", "high"]);
 
 export const movementTypeEnum = pgEnum("movement_type", ["receipt", "sale", "waste"]);
 
-export const movementSourceEnum = pgEnum("movement_source", ["manual", "3scheckout_api"]);
+export const movementSourceEnum = pgEnum("movement_source", ["manual", "3scheckout_api", "xml_drive"]);
 
 // doublePrecision (not integer) because supplies can be counted in fractional units
 // (kg, liters) for some categories. Burgers specifically are always whole units —

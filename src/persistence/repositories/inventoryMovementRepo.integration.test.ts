@@ -27,6 +27,20 @@ describe("inventoryMovementRepo", () => {
     expect(created.quantity).toBe(100);
   });
 
+  it("accepts the xml_drive source (A2)", async () => {
+    const testStore = await createTestStore(db);
+    const testSupply = await createTestSupply(db, testStore.id);
+
+    const created = await inventoryMovementRepo.insert(db, {
+      supplyId: testSupply.id,
+      type: "sale",
+      quantity: 3,
+      source: "xml_drive",
+    });
+
+    expect(created.source).toBe("xml_drive");
+  });
+
   it("sums receipts, sales and waste separately since a given date", async () => {
     const testStore = await createTestStore(db);
     const testSupply = await createTestSupply(db, testStore.id);

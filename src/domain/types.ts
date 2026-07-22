@@ -8,4 +8,4 @@ export type Criticality = "low" | "medium" | "high";
 
 export type MovementType = "receipt" | "sale" | "waste";
 
-export type MovementSource = "manual" | "3scheckout_api";
+export type MovementSource = "manual" | "3scheckout_api" | "xml_drive";

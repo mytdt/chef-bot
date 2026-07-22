@@ -1,0 +1,1 @@
+ALTER TYPE "public"."movement_source" ADD VALUE 'xml_drive';
