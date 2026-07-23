@@ -12,7 +12,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "migrate": "tsx src/persistence/migrate.ts",
     "db:generate": "drizzle-kit generate",
-    "seed": "tsx src/persistence/seed.ts"
+    "seed": "tsx src/persistence/seed.ts",
+    "seed:baseline": "tsx src/persistence/seedBaseline.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
