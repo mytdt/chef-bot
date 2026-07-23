@@ -10,6 +10,8 @@ import type { DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 import type { DriveFileContentApi, DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
 import { resumeAwaitingCounts } from "src/domain/ingestionResume.js";
 import { DATE_ONLY_PATTERN, parseDateOnly } from "src/domain/dateOnly.js";
+import { errorContext, log } from "src/logging/logger.js";
+import { withCommandLogging } from "src/logging/withCommandLogging.js";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -45,6 +47,19 @@ function formatWasteSummary(result: IngestDailyWasteResult): string[] {
   return lines;
 }
 
+function logIngestionResult(
+  kind: "sale" | "receipt" | "waste",
+  result: IngestDailySalesResult | IngestDailyReceiptsResult | IngestDailyWasteResult,
+): void {
+  log.info("ingest_xml", `${kind} ingestion result`, {
+    found: result.totalFilesFound,
+    processed: result.processed.length,
+    skippedAlreadyProcessed: result.skippedAlreadyProcessed.length,
+    errors: result.errors.length,
+    errorDetails: result.errors.map((entry) => `${entry.fileName}: ${entry.error}`),
+  });
+}
+
 export interface IngestXmlHandlerDeps {
   adminTelegramIds: string[];
   driveFiles: DriveFilesApi & DriveFileContentApi & DriveFileBinaryContentApi;
@@ -77,60 +92,72 @@ export interface IngestXmlHandlerDeps {
  * just sales.
  */
 export function registerIngestXmlCommand(bot: Telegraf<Context>, db: Db, deps: IngestXmlHandlerDeps): void {
-  bot.command("ingest_xml", createAdminMiddleware(deps.adminTelegramIds), async (ctx) => {
-    const activeStore = await storeRepo.findActiveStore(db);
-    if (!activeStore) {
-      await ctx.reply("Nenhuma loja ativa configurada.");
-      return;
-    }
-
-    const dateArg = ctx.message.text.trim().split(/\s+/)[1];
-    if (dateArg && !DATE_ONLY_PATTERN.test(dateArg)) {
-      await ctx.reply("Formato inválido. Use: /ingest_xml [AAAA-MM-DD] (sem data, usa hoje).");
-      return;
-    }
-    const dateIso = dateArg ?? todayIso();
-    const date = parseDateOnly(dateIso);
-
-    await ctx.reply(`⏳ Ingerindo dados de ${dateIso} (venda, recebimento e desperdício)...`);
-
-    const lines: string[] = [];
-
-    try {
-      const salesResult = await ingestDailySales(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
-      await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "sale");
-      lines.push(...formatSalesSummary(salesResult));
-    } catch (error) {
-      console.error("Failed to ingest daily sales XML:", error);
-      lines.push("❌ Vendas: falha ao acessar o Google Drive — não registrado, tente novamente.");
-    }
-
-    try {
-      const receiptsResult = await ingestDailyReceipts(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
-      await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "receipt");
-      lines.push(...formatReceiptsSummary(receiptsResult));
-    } catch (error) {
-      console.error("Failed to ingest daily receipt XML:", error);
-      lines.push("❌ Recebimento: falha ao acessar o Google Drive — não registrado, tente novamente.");
-    }
-
-    try {
-      const wasteResult = await ingestDailyWaste(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
-      await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "waste");
-      lines.push(...formatWasteSummary(wasteResult));
-    } catch (error) {
-      console.error("Failed to ingest daily waste XLSXs:", error);
-      lines.push("❌ Desperdício: falha ao acessar o Google Drive — não registrado, tente novamente.");
-    }
-
-    await ctx.reply(lines.join("\n"));
-
-    const allTypesIngested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, dateIso);
-    if (allTypesIngested) {
-      const resumedCount = await resumeAwaitingCounts(bot, db, activeStore.id, dateIso);
-      if (resumedCount > 0) {
-        await ctx.reply(`🔄 ${resumedCount} contagem(ns) pendente(s) processada(s) automaticamente.`);
+  bot.command(
+    "ingest_xml",
+    createAdminMiddleware(deps.adminTelegramIds),
+    withCommandLogging("ingest_xml", async (ctx) => {
+      if (!ctx.message || !("text" in ctx.message)) {
+        return;
       }
-    }
-  });
+
+      const activeStore = await storeRepo.findActiveStore(db);
+      if (!activeStore) {
+        await ctx.reply("Nenhuma loja ativa configurada.");
+        return;
+      }
+
+      const dateArg = ctx.message.text.trim().split(/\s+/)[1];
+      if (dateArg && !DATE_ONLY_PATTERN.test(dateArg)) {
+        await ctx.reply("Formato inválido. Use: /ingest_xml [AAAA-MM-DD] (sem data, usa hoje).");
+        return;
+      }
+      const dateIso = dateArg ?? todayIso();
+      const date = parseDateOnly(dateIso);
+
+      await ctx.reply(`⏳ Ingerindo dados de ${dateIso} (venda, recebimento e desperdício)...`);
+
+      const lines: string[] = [];
+
+      try {
+        const salesResult = await ingestDailySales(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
+        await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "sale");
+        logIngestionResult("sale", salesResult);
+        lines.push(...formatSalesSummary(salesResult));
+      } catch (error) {
+        log.error("ingest_xml", "sales ingestion failed", { date: dateIso, ...errorContext(error) });
+        lines.push("❌ Vendas: falha ao acessar o Google Drive — não registrado, tente novamente.");
+      }
+
+      try {
+        const receiptsResult = await ingestDailyReceipts(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
+        await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "receipt");
+        logIngestionResult("receipt", receiptsResult);
+        lines.push(...formatReceiptsSummary(receiptsResult));
+      } catch (error) {
+        log.error("ingest_xml", "receipt ingestion failed", { date: dateIso, ...errorContext(error) });
+        lines.push("❌ Recebimento: falha ao acessar o Google Drive — não registrado, tente novamente.");
+      }
+
+      try {
+        const wasteResult = await ingestDailyWaste(db, deps.driveFiles, deps.rootFolderId, activeStore.id, date);
+        await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "waste");
+        logIngestionResult("waste", wasteResult);
+        lines.push(...formatWasteSummary(wasteResult));
+      } catch (error) {
+        log.error("ingest_xml", "waste ingestion failed", { date: dateIso, ...errorContext(error) });
+        lines.push("❌ Desperdício: falha ao acessar o Google Drive — não registrado, tente novamente.");
+      }
+
+      await ctx.reply(lines.join("\n"));
+
+      const allTypesIngested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, dateIso);
+      if (allTypesIngested) {
+        const resumedCount = await resumeAwaitingCounts(bot, db, activeStore.id, dateIso);
+        if (resumedCount > 0) {
+          log.info("ingest_xml", "resumed awaiting counts", { date: dateIso, resumedCount });
+          await ctx.reply(`🔄 ${resumedCount} contagem(ns) pendente(s) processada(s) automaticamente.`);
+        }
+      }
+    }),
+  );
 }

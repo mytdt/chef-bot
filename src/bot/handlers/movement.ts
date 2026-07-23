@@ -6,6 +6,7 @@ import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMo
 import * as storeRepo from "src/persistence/repositories/storeRepo.js";
 import { isValidQuantity } from "src/domain/quantityRules.js";
 import type { MovementType } from "src/domain/types.js";
+import { withCommandLogging } from "src/logging/withCommandLogging.js";
 
 const argsSchema = z.object({
   quantity: z.number().finite().positive(),
@@ -37,39 +38,45 @@ const MOVEMENT_TYPE_LABELS_PT: Record<MovementType, string> = {
 };
 
 function registerMovementCommand(bot: Telegraf<Context>, db: Db, command: string, type: MovementType): void {
-  bot.command(command, async (ctx) => {
-    const args = parseArgs(ctx.message.text);
-    if (!args) {
-      await ctx.reply(`Formato inválido. Use: /${command} <nome do insumo> <quantidade>`);
-      return;
-    }
+  bot.command(
+    command,
+    withCommandLogging(command, async (ctx) => {
+      if (!ctx.message || !("text" in ctx.message)) {
+        return;
+      }
+      const args = parseArgs(ctx.message.text);
+      if (!args) {
+        await ctx.reply(`Formato inválido. Use: /${command} <nome do insumo> <quantidade>`);
+        return;
+      }
 
-    const activeStore = await storeRepo.findActiveStore(db);
-    if (!activeStore) {
-      await ctx.reply("Nenhuma loja ativa configurada.");
-      return;
-    }
+      const activeStore = await storeRepo.findActiveStore(db);
+      if (!activeStore) {
+        await ctx.reply("Nenhuma loja ativa configurada.");
+        return;
+      }
 
-    const supplyFound = await supplyRepo.findByName(db, activeStore.id, args.supplyName);
-    if (!supplyFound) {
-      await ctx.reply(`Insumo "${args.supplyName}" não encontrado no cadastro.`);
-      return;
-    }
+      const supplyFound = await supplyRepo.findByName(db, activeStore.id, args.supplyName);
+      if (!supplyFound) {
+        await ctx.reply(`Insumo "${args.supplyName}" não encontrado no cadastro.`);
+        return;
+      }
 
-    if (!isValidQuantity(supplyFound.category, args.quantity)) {
-      await ctx.reply(`Quantidade precisa ser um número inteiro para "${supplyFound.name}".`);
-      return;
-    }
+      if (!isValidQuantity(supplyFound.category, args.quantity)) {
+        await ctx.reply(`Quantidade precisa ser um número inteiro para "${supplyFound.name}".`);
+        return;
+      }
 
-    await inventoryMovementRepo.insert(db, {
-      supplyId: supplyFound.id,
-      type,
-      quantity: args.quantity,
-      source: "manual",
-    });
+      await inventoryMovementRepo.insert(db, {
+        supplyId: supplyFound.id,
+        type,
+        quantity: args.quantity,
+        source: "manual",
+      });
 
-    await ctx.reply(`Registrado: ${MOVEMENT_TYPE_LABELS_PT[type]} de ${args.quantity} para "${supplyFound.name}".`);
-  });
+      await ctx.reply(`Registrado: ${MOVEMENT_TYPE_LABELS_PT[type]} de ${args.quantity} para "${supplyFound.name}".`);
+    }),
+  );
 }
 
 export function registerMovementHandler(bot: Telegraf<Context>, db: Db): void {

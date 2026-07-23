@@ -1,6 +1,8 @@
 import type { Context, Telegraf } from "telegraf";
 import { createAdminMiddleware } from "src/bot/middleware/authorization.js";
 import type { LLMParser } from "src/llm/llmParser.js";
+import { errorContext, log } from "src/logging/logger.js";
+import { withCommandLogging } from "src/logging/withCommandLogging.js";
 
 // Trivial, fixed input — this command exists to check "does a model answer at all", not
 // to validate parsing correctness (bot/parse.schema.test.ts and friends already cover
@@ -28,14 +30,18 @@ export interface LlmCheckHandlerDeps {
  * shouldn't be triggerable by anyone in the group on a whim.
  */
 export function registerLlmCheckCommand(bot: Telegraf<Context>, deps: LlmCheckHandlerDeps): void {
-  bot.command("llm_check", createAdminMiddleware(deps.adminTelegramIds), async (ctx) => {
-    try {
-      const result = await deps.llmParser.parse(CHECK_TEXT);
-      const providerLabel = result.provider === "gemini" ? "gemini (fallback)" : result.provider;
-      await ctx.reply(`✅ Modelo respondeu: ${providerLabel}`);
-    } catch (error) {
-      console.error("llm_check failed:", error);
-      await ctx.reply("❌ Nenhum modelo respondeu (Claude e Gemini indisponíveis). Veja os logs do bot para detalhes.");
-    }
-  });
+  bot.command(
+    "llm_check",
+    createAdminMiddleware(deps.adminTelegramIds),
+    withCommandLogging("llm_check", async (ctx) => {
+      try {
+        const result = await deps.llmParser.parse(CHECK_TEXT);
+        const providerLabel = result.provider === "gemini" ? "gemini (fallback)" : result.provider;
+        await ctx.reply(`✅ Modelo respondeu: ${providerLabel}`);
+      } catch (error) {
+        log.error("llm_check", "parse failed", errorContext(error));
+        await ctx.reply("❌ Nenhum modelo respondeu (Claude e Gemini indisponíveis). Veja os logs do bot para detalhes.");
+      }
+    }),
+  );
 }

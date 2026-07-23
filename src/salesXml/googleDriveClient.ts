@@ -2,6 +2,7 @@ import type { Readable } from "node:stream";
 import { google, type drive_v3 } from "googleapis";
 import type { DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 import type { DriveFileContentApi, DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
+import { errorContext, log } from "src/logging/logger.js";
 
 /**
  * GOOGLE_SERVICE_ACCOUNT_KEY (DECISIONS.md, 21/07) can be the raw service account JSON
@@ -31,6 +32,26 @@ async function collectStreamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+async function withDriveTiming<T>(
+  operation: "list" | "get" | "getBinary",
+  detail: Record<string, unknown>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const started = Date.now();
+  try {
+    const result = await run();
+    log.info("drive", `${operation} ok`, { ...detail, durationMs: Date.now() - started });
+    return result;
+  } catch (error) {
+    log.error("drive", `${operation} failed`, {
+      ...detail,
+      durationMs: Date.now() - started,
+      ...errorContext(error),
+    });
+    throw error;
+  }
+}
+
 /**
  * B3 bot integration: bridges the real googleapis client to the narrow DriveFilesApi +
  * DriveFileContentApi + DriveFileBinaryContentApi interfaces salesXml/*.ts and
@@ -56,11 +77,29 @@ export function createDriveFilesAndContentApi(
   }
 
   return {
-    list: (params) => drive.files.list(params),
+    list: (params) =>
+      withDriveTiming("list", { q: params.q ?? null, pageToken: params.pageToken ?? null }, () =>
+        drive.files.list(params),
+      ),
     async get({ fileId }) {
-      const buffer = await downloadRaw(fileId);
+      const buffer = await withDriveTiming("get", { fileId }, () => downloadRaw(fileId));
       return { data: buffer.toString("utf-8") };
     },
-    getBinary: (fileId) => downloadRaw(fileId),
+    getBinary: (fileId) => withDriveTiming("getBinary", { fileId }, () => downloadRaw(fileId)),
   };
+}
+
+/**
+ * Forces a first Drive round-trip at boot so JWT/auth latency shows up in startup logs
+ * instead of the first /ingest_xml. Caller logs duration around this call.
+ */
+export async function warmDriveConnection(
+  driveFiles: DriveFilesApi,
+  rootFolderId: string,
+): Promise<void> {
+  await driveFiles.list({
+    q: `'${rootFolderId}' in parents and trashed = false`,
+    pageSize: 1,
+    fields: "files(id)",
+  });
 }

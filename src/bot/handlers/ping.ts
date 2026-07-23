@@ -1,4 +1,5 @@
 import type { Context, Telegraf } from "telegraf";
+import { withCommandLogging } from "src/logging/withCommandLogging.js";
 
 /**
  * Sanity-check layer 1 (before /llm_check and the full ingestion flow): confirms the
@@ -7,7 +8,10 @@ import type { Context, Telegraf } from "telegraf";
  * telegram.ts) can run it, since it costs nothing and reveals nothing sensitive.
  */
 export function registerPingCommand(bot: Telegraf<Context>): void {
-  bot.command("ping", async (ctx) => {
-    await ctx.reply("🏓 Pong! Bot ativo e ouvindo este grupo.");
-  });
+  bot.command(
+    "ping",
+    withCommandLogging("ping", async (ctx) => {
+      await ctx.reply("🏓 Pong! Bot ativo e ouvindo este grupo.");
+    }),
+  );
 }
