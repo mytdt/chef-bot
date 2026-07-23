@@ -3,18 +3,22 @@ import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
 import { parseWasteIncompleteReport } from "src/wastePdf/wasteIncompleteParser.js";
 import { WASTE_SKU_MAP } from "src/wastePdf/wasteSkuMap.js";
+import { isValidQuantity } from "src/domain/quantityRules.js";
 
 export interface ProcessWasteIncompleteResult {
   hasData: boolean;
   inserted: { supplyCode: string; quantity: number }[];
   skippedUnmappedSkus: string[];
   skippedSupplyCodesNotFound: string[];
+  skippedInvalidQuantity: { supplyCode: string; quantity: number }[];
 }
 
 /**
  * B6 ("Incompleto"): turns the waste report's rows into InventoryMovement rows (type:
- * "waste", source: "xml_drive"), same defensive posture as B1/B5 — unmapped SKUs and
- * Supplies that don't exist yet are skipped and reported, not thrown.
+ * "waste", source: "xml_drive"), same defensive posture as B1/B5 — unmapped SKUs,
+ * Supplies that don't exist yet, and a quantity that violates
+ * domain/quantityRules.ts (e.g. a fractional Burger count) are all skipped and
+ * reported, not thrown.
  */
 export async function processWasteIncompleteReport(db: Db, storeId: string, pdfText: string): Promise<ProcessWasteIncompleteResult> {
   const report = parseWasteIncompleteReport(pdfText);
@@ -24,6 +28,7 @@ export async function processWasteIncompleteReport(db: Db, storeId: string, pdfT
     inserted: [],
     skippedUnmappedSkus: [],
     skippedSupplyCodesNotFound: [],
+    skippedInvalidQuantity: [],
   };
 
   for (const row of report.rows) {
@@ -36,6 +41,11 @@ export async function processWasteIncompleteReport(db: Db, storeId: string, pdfT
     const supplyFound = await supplyRepo.findByCode(db, storeId, supplyCode);
     if (!supplyFound) {
       result.skippedSupplyCodesNotFound.push(supplyCode);
+      continue;
+    }
+
+    if (!isValidQuantity(supplyFound.category, row.quantity)) {
+      result.skippedInvalidQuantity.push({ supplyCode, quantity: row.quantity });
       continue;
     }
 

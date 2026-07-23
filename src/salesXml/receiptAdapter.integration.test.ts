@@ -70,6 +70,20 @@ describe("processNfeReceipt", () => {
     expect(result.skippedMissingUnitsPerBox).toEqual(["W"]);
   });
 
+  it("skips (not throws) a fractional quantity for a Burger-category Supply", async () => {
+    const testStore = await createTestStore(db);
+    // unitsPerBox: 3 (not the real 36) so 0.5 boxes -> 1.5 units, a fractional quantity.
+    const testSupply = await createTestSupply(db, testStore.id, { code: "G", name: "Burger de 160g", unitsPerBox: 3 });
+
+    const xml = nfe55Xml({ items: [{ cProd: "052700.0160006", qCom: "0.5000" }] });
+    const result = await processNfeReceipt(db, testStore.id, xml);
+
+    expect(result.inserted).toEqual([]);
+    expect(result.skippedInvalidQuantity).toEqual([{ supplyCode: "G", quantity: 1.5 }]);
+    const totals = await inventoryMovementRepo.sumSince(db, testSupply.id, new Date(0));
+    expect(totals.receipts).toBe(0);
+  });
+
   it("skips (does not throw) a document that isn't modelo 55", async () => {
     const testStore = await createTestStore(db);
 

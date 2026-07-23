@@ -106,6 +106,20 @@ describe("processNfceSale", () => {
     expect(result.skippedSupplyCodesNotFound).toEqual(["F"]);
   });
 
+  it("skips (not throws) a fractional quantity for a Burger-category Supply", async () => {
+    const testStore = await createTestStore(db);
+    const supplyF = await createTestSupply(db, testStore.id, { code: "F", name: "Burger de 90g" }); // category: "burger" (default)
+
+    const xml = nfceXml({ items: [{ cProd: 1001, qCom: "1.5000" }] }); // F x1 -> quantity 1.5, not a whole number
+
+    const result = await processNfceSale(db, testStore.id, xml);
+
+    expect(result.inserted).toEqual([]);
+    expect(result.skippedInvalidQuantity).toEqual([{ supplyCode: "F", quantity: 1.5 }]);
+    const totals = await inventoryMovementRepo.sumSince(db, supplyF.id, new Date(0));
+    expect(totals.sales).toBe(0);
+  });
+
   it("skips the whole document (no writes) when natOp is not venda", async () => {
     const testStore = await createTestStore(db);
     await createTestSupply(db, testStore.id, { code: "F", name: "Burger de 90g" });
