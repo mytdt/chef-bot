@@ -9,6 +9,8 @@ import { registerMovementHandler } from "src/bot/handlers/movement.js";
 import { registerConfirmationHandler } from "src/bot/handlers/confirmation.js";
 import { registerCountHandler } from "src/bot/handlers/count.js";
 import { registerIngestXmlCommand } from "src/bot/handlers/ingestXml.js";
+import { registerPingCommand } from "src/bot/handlers/ping.js";
+import { registerLlmCheckCommand } from "src/bot/handlers/llmCheck.js";
 import { createDriveFilesAndContentApi } from "src/salesXml/googleDriveClient.js";
 import * as storeRepo from "src/persistence/repositories/storeRepo.js";
 
@@ -35,6 +37,8 @@ async function main() {
 
   // Specific commands and callbacks before the free-text handler (catch-all), which
   // also guards itself against command messages as a safety net.
+  registerPingCommand(bot);
+  registerLlmCheckCommand(bot, { adminTelegramIds: env.ADMIN_TELEGRAM_IDS, llmParser });
   registerMovementHandler(bot, db);
   registerConfirmationHandler(bot, db);
   registerCountHandler(bot, { llmParser });
