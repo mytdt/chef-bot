@@ -2,9 +2,8 @@ import type { Db } from "src/persistence/db.js";
 import * as processedWasteFileRepo from "src/persistence/repositories/processedWasteFileRepo.js";
 import { findDailyWasteFiles, type DriveFileRef, type DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 import { downloadBinaryFileContent, type DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
-import { extractPdfText } from "src/wastePdf/pdfText.js";
-import { processWasteCompleteReport, type ProcessWasteCompleteResult } from "src/wastePdf/wasteCompleteAdapter.js";
-import { processWasteIncompleteReport, type ProcessWasteIncompleteResult } from "src/wastePdf/wasteIncompleteAdapter.js";
+import { processWasteCompleteReport, type ProcessWasteCompleteResult } from "src/wasteXlsx/wasteCompleteAdapter.js";
+import { processWasteIncompleteReport, type ProcessWasteIncompleteResult } from "src/wasteXlsx/wasteIncompleteAdapter.js";
 
 export type WasteReportType = "complete" | "incomplete";
 
@@ -28,8 +27,6 @@ export interface IngestDailyWasteResult {
   errors: WasteFileProcessingError[];
 }
 
-type PdfTextExtractor = (buffer: Buffer) => Promise<string>;
-
 async function processOneWasteFile(
   db: Db,
   files: DriveFileBinaryContentApi,
@@ -37,7 +34,6 @@ async function processOneWasteFile(
   file: DriveFileRef,
   reportType: WasteReportType,
   result: IngestDailyWasteResult,
-  extractText: PdfTextExtractor,
 ): Promise<void> {
   const alreadyProcessed = await processedWasteFileRepo.isAlreadyProcessed(db, storeId, file.id);
   if (alreadyProcessed) {
@@ -46,10 +42,11 @@ async function processOneWasteFile(
   }
 
   try {
-    const pdfBuffer = await downloadBinaryFileContent(files, file.id);
-    const pdfText = await extractText(pdfBuffer);
+    const xlsxBuffer = await downloadBinaryFileContent(files, file.id);
     const reportResult =
-      reportType === "complete" ? await processWasteCompleteReport(db, storeId, pdfText) : await processWasteIncompleteReport(db, storeId, pdfText);
+      reportType === "complete"
+        ? await processWasteCompleteReport(db, storeId, xlsxBuffer)
+        : await processWasteIncompleteReport(db, storeId, xlsxBuffer);
     await processedWasteFileRepo.markProcessed(db, storeId, file.id);
     result.processed.push({ fileId: file.id, fileName: file.name, reportType, result: reportResult });
   } catch (error) {
@@ -72,7 +69,7 @@ function pushAmbiguityErrors(result: IngestDailyWasteResult, files: DriveFileRef
 }
 
 /**
- * B6: ingests both daily waste-report PDFs ("Completo" and "Incompleto"), same
+ * B6: ingests both daily waste-report XLSXs ("Completo" and "Incompleto"), same
  * manual-trigger posture (D11) and per-file error isolation as
  * dailySalesIngestion.ts/dailyReceiptIngestion.ts.
  *
@@ -91,13 +88,6 @@ function pushAmbiguityErrors(result: IngestDailyWasteResult, files: DriveFileRef
  * Idempotency (processedWasteFileRepo) is by Drive file id, same table for both report
  * types — they're always different files with different ids, so no extra
  * discrimination is needed to keep them independent.
- *
- * `extractText` defaults to the real pdf-parse-backed extractPdfText, overridable so
- * tests can exercise the orchestration logic (classification routing, idempotency,
- * ambiguity handling, per-file error isolation) against plain fixture strings shaped
- * like real extracted PDF text (see wasteIncompleteParser.test.ts/
- * wasteCompleteParser.test.ts for what that shape looks like) instead of needing to
- * construct real PDF binary bytes just to test orchestration.
  */
 export async function ingestDailyWaste(
   db: Db,
@@ -105,7 +95,6 @@ export async function ingestDailyWaste(
   rootFolderId: string,
   storeId: string,
   date: Date,
-  extractText: PdfTextExtractor = extractPdfText,
 ): Promise<IngestDailyWasteResult> {
   const found = await findDailyWasteFiles(files, rootFolderId, date);
 
@@ -128,7 +117,7 @@ export async function ingestDailyWaste(
     pushAmbiguityErrors(result, found.complete, "Completo");
   } else {
     for (const file of found.complete) {
-      await processOneWasteFile(db, files, storeId, file, "complete", result, extractText);
+      await processOneWasteFile(db, files, storeId, file, "complete", result);
     }
   }
 
@@ -136,7 +125,7 @@ export async function ingestDailyWaste(
     pushAmbiguityErrors(result, found.incomplete, "Incompleto");
   } else {
     for (const file of found.incomplete) {
-      await processOneWasteFile(db, files, storeId, file, "incomplete", result, extractText);
+      await processOneWasteFile(db, files, storeId, file, "incomplete", result);
     }
   }
 

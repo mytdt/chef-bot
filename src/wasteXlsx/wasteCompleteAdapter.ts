@@ -1,7 +1,7 @@
 import type { Db } from "src/persistence/db.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
-import { parseWasteCompleteReport } from "src/wastePdf/wasteCompleteParser.js";
+import { parseWasteCompleteReport } from "src/wasteXlsx/wasteCompleteParser.js";
 import { lookupProductMapping } from "src/salesXml/productMap.js";
 import { isValidQuantity } from "src/domain/quantityRules.js";
 
@@ -17,14 +17,18 @@ export interface ProcessWasteCompleteResult {
  * B6 ("Completo"): turns whole-menu-item waste into InventoryMovement rows (type:
  * "waste", source: "xml_drive") by decomposing each item into the insumo it consumes —
  * reusing B1's salesXml/productMap.ts (the same recipe table sales already use), not a
- * separate table, since the report's "Cód." column was confirmed to be the same code
- * space as the sales NFC-e's `cProd` (see wasteReportSchema.ts). Same defensive
- * posture as B1/B5/wasteIncompleteAdapter: unmapped codes, missing Supplies, and a
- * computed quantity that violates domain/quantityRules.ts (e.g. a fractional Burger
- * count from an odd multiplier) are all skipped and reported, not thrown.
+ * separate table, since the report's "SKU" column is the same code space as the sales
+ * NFC-e's `cProd` (see wasteReportSchema.ts). Same defensive posture as
+ * B1/B5/wasteIncompleteAdapter: unmapped codes, missing Supplies, and a computed
+ * quantity that violates domain/quantityRules.ts (e.g. a fractional Burger count from
+ * an odd multiplier) are all skipped and reported, not thrown.
  */
-export async function processWasteCompleteReport(db: Db, storeId: string, pdfText: string): Promise<ProcessWasteCompleteResult> {
-  const report = parseWasteCompleteReport(pdfText);
+export async function processWasteCompleteReport(
+  db: Db,
+  storeId: string,
+  xlsxBuffer: Buffer,
+): Promise<ProcessWasteCompleteResult> {
+  const report = await parseWasteCompleteReport(xlsxBuffer);
 
   const result: ProcessWasteCompleteResult = {
     hasData: report.hasData,

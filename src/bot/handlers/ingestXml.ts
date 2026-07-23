@@ -119,7 +119,7 @@ export function registerIngestXmlCommand(bot: Telegraf<Context>, db: Db, deps: I
       await dailyIngestionRunRepo.recordRun(db, activeStore.id, dateIso, "waste");
       lines.push(...formatWasteSummary(wasteResult));
     } catch (error) {
-      console.error("Failed to ingest daily waste PDFs:", error);
+      console.error("Failed to ingest daily waste XLSXs:", error);
       lines.push("❌ Desperdício: falha ao acessar o Google Drive — não registrado, tente novamente.");
     }
 

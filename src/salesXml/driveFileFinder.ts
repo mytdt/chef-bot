@@ -171,9 +171,10 @@ function classifyWasteFileName(name: string): "complete" | "incomplete" | null {
 }
 
 /**
- * B6: locates the two daily waste-report PDFs ("Completo" and "Incompleto") under
- * `chef-bot/<year>/<month>/<day>/desperdicios/*.pdf`, classified by filename (confirmed
- * naming, 22/07: the file names contain "Completo" or "Incompleto").
+ * B6: locates the two daily waste-report XLSXs ("Completo" and "Incompleto") under
+ * `chef-bot/<year>/<month>/<day>/desperdicios/*.xlsx`, classified by filename (confirmed
+ * naming, 22/07: the file names contain "Completo" or "Incompleto"; format migrated from
+ * PDF → XLSX on 23/07).
  *
  * Deliberately does NOT collapse this into a flat list + let the caller guess which
  * file is which — classification happens once, here, so every caller sees the same
@@ -193,9 +194,9 @@ export async function findDailyWasteFiles(files: DriveFilesApi, rootFolderId: st
     return empty;
   }
 
-  const pdfFiles = await listFilesInFolder(files, wasteFolderId, ".pdf");
+  const xlsxFiles = await listFilesInFolder(files, wasteFolderId, ".xlsx");
   const result: CategorizedWasteFiles = { complete: [], incomplete: [], unrecognized: [] };
-  for (const file of pdfFiles) {
+  for (const file of xlsxFiles) {
     const category = classifyWasteFileName(file.name);
     if (category === "complete") {
       result.complete.push(file);

@@ -1,8 +1,8 @@
 import type { Db } from "src/persistence/db.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
-import { parseWasteIncompleteReport } from "src/wastePdf/wasteIncompleteParser.js";
-import { WASTE_SKU_MAP } from "src/wastePdf/wasteSkuMap.js";
+import { parseWasteIncompleteReport } from "src/wasteXlsx/wasteIncompleteParser.js";
+import { WASTE_SKU_MAP } from "src/wasteXlsx/wasteSkuMap.js";
 import { isValidQuantity } from "src/domain/quantityRules.js";
 
 export interface ProcessWasteIncompleteResult {
@@ -20,8 +20,12 @@ export interface ProcessWasteIncompleteResult {
  * domain/quantityRules.ts (e.g. a fractional Burger count) are all skipped and
  * reported, not thrown.
  */
-export async function processWasteIncompleteReport(db: Db, storeId: string, pdfText: string): Promise<ProcessWasteIncompleteResult> {
-  const report = parseWasteIncompleteReport(pdfText);
+export async function processWasteIncompleteReport(
+  db: Db,
+  storeId: string,
+  xlsxBuffer: Buffer,
+): Promise<ProcessWasteIncompleteResult> {
+  const report = await parseWasteIncompleteReport(xlsxBuffer);
 
   const result: ProcessWasteIncompleteResult = {
     hasData: report.hasData,

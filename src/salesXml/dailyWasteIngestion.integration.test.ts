@@ -4,6 +4,11 @@ import type { DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 import type { DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
 import { createTestStore, createTestSupply, getTestDb, resetDatabase } from "src/persistence/repositories/testUtils.js";
+import {
+  buildEmptyWasteReportXlsx,
+  buildUnrecognizedWasteReportXlsx,
+  buildWasteReportXlsx,
+} from "src/wasteXlsx/wasteReportXlsxFixture.js";
 
 const db = getTestDb();
 
@@ -24,13 +29,7 @@ interface FakeNode {
   type: "folder" | "file";
 }
 
-// Content is stored/returned as plain text via Buffer round-tripping (UTF-8) instead of
-// real PDF bytes — paired with a fake `extractText` that just decodes the buffer back
-// to a string (see below), so these tests exercise ingestDailyWaste's orchestration
-// (classification routing, idempotency, ambiguity, per-file error isolation) without
-// needing to construct real PDF binary content, which pdf-parse itself already has
-// dedicated coverage for (wasteIncompleteParser.test.ts/wasteCompleteParser.test.ts).
-function fakeDrive(tree: Record<string, FakeNode[]>, contents: Record<string, string>): DriveFilesApi & DriveFileBinaryContentApi {
+function fakeDrive(tree: Record<string, FakeNode[]>, contents: Record<string, Buffer>): DriveFilesApi & DriveFileBinaryContentApi {
   return {
     async list({ q }) {
       const parentId = q.match(/'([^']+)' in parents/)?.[1] ?? "";
@@ -50,64 +49,42 @@ function fakeDrive(tree: Record<string, FakeNode[]>, contents: Record<string, st
     async getBinary(fileId) {
       const content = contents[fileId];
       if (content === undefined) throw new Error(`No fake content for file ${fileId}`);
-      return Buffer.from(content, "utf-8");
+      return content;
     },
   };
 }
 
-const fakeExtractText = async (buffer: Buffer): Promise<string> => buffer.toString("utf-8");
-
-const INCOMPLETE_HEADER = `Página 1 de 2
-Lista de Desperdício Incompleto
-FILTROS - DETALHADO
-VALOR TOTAL
-R$ 1,00
-QUANTIDADE
-0
-0032 - Bom Beef Belem
-SKU Produto Data Período Usuário Razão Qtd. Custo Unit. Valor Total Atualizado
-em
-Atualizado
-por
-`;
-const INCOMPLETE_FOOTER = `
--- 1 of 2 --
-`;
-function incompleteReport(rows: string): string {
-  return INCOMPLETE_HEADER + rows + INCOMPLETE_FOOTER;
+async function incompleteQueijoBuffer(): Promise<Buffer> {
+  return buildWasteReportXlsx([
+    {
+      sku: "508",
+      product: "Queijo Gouda",
+      date: "01/01/2026",
+      period: "Manhã",
+      userId: "233",
+      reason: "Perda Operacional",
+      quantity: 0.02,
+      unitCost: 53.41,
+      totalValue: 1.12,
+    },
+  ]);
 }
-const INCOMPLETE_ROW_QUEIJO = `508
-Queijo
-Gouda 01/01/2026 Manhã 233
-Perda
-Operacional 0,02 R$ 53,41 R$ 1,12`;
 
-const COMPLETE_HEADER = `Página 1 de 2
-Lista de Desperdício Completo
-FILTROS - DETALHADO
-VALOR TOTAL
-R$ 15,00
-QUANTIDADE
-1
-0032 - Bom Beef Belem
-Cód. Produto Data Período Usuário Razão Qtd Custo Custo Total Atualizado
-em
-Atualizado
-por
-`;
-const COMPLETE_FOOTER = `
--- 1 of 2 --
-`;
-function completeReport(rows: string): string {
-  return COMPLETE_HEADER + rows + COMPLETE_FOOTER;
+async function completeWagyuBuffer(): Promise<Buffer> {
+  return buildWasteReportXlsx([
+    {
+      sku: "1031",
+      product: "Some Menu Item",
+      date: "01/01/2026",
+      period: "Noite",
+      userId: "999",
+      reason: "Some Reason",
+      quantity: 1,
+      unitCost: 15,
+      totalValue: 15,
+    },
+  ]);
 }
-const COMPLETE_ROW_WAGYU = `1031 Some Menu Item 01/01/2026 Noite 999
-Some
-Reason 1,00 R$ 15,00 R$ 15,00
-01/01/2026
-20:00:00 999`;
-
-const EMPTY_REPORT = "Página 1 de 2\nLista de Desperdício\nVALOR TOTAL\nR$ 0,00\nQUANTIDADE\n0\nNenhum dado encontrado\n";
 
 const treeWithBothFiles = {
   [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" as const }],
@@ -115,8 +92,8 @@ const treeWithBothFiles = {
   "month-07": [{ id: "day-18", name: "18", type: "folder" as const }],
   "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" as const }],
   desperdicios: [
-    { id: "complete-file", name: "Desperdicio_Completo.pdf", type: "file" as const },
-    { id: "incomplete-file", name: "Desperdicio_Incompleto.pdf", type: "file" as const },
+    { id: "complete-file", name: "Desperdicio_Completo.xlsx", type: "file" as const },
+    { id: "incomplete-file", name: "Desperdicio_Incompleto.xlsx", type: "file" as const },
   ],
 };
 
@@ -125,7 +102,7 @@ describe("ingestDailyWaste", () => {
     const testStore = await createTestStore(db);
     const drive = fakeDrive({ [ROOT]: [] }, {});
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.totalFilesFound).toBe(0);
     expect(result.processed).toEqual([]);
@@ -138,12 +115,12 @@ describe("ingestDailyWaste", () => {
     const supplyQueijo = await createTestSupply(db, testStore.id, { code: "QUEIJO_GOUDA", name: "Queijo Gouda", category: "cheese" });
 
     const contents = {
-      "complete-file": completeReport(COMPLETE_ROW_WAGYU),
-      "incomplete-file": incompleteReport(INCOMPLETE_ROW_QUEIJO),
+      "complete-file": await completeWagyuBuffer(),
+      "incomplete-file": await incompleteQueijoBuffer(),
     };
     const drive = fakeDrive(treeWithBothFiles, contents);
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.totalFilesFound).toBe(2);
     expect(result.errors).toEqual([]);
@@ -161,19 +138,19 @@ describe("ingestDailyWaste", () => {
     const testStore = await createTestStore(db);
     const supplyW = await createTestSupply(db, testStore.id, { code: "W", name: "Burger de Wagyu de 200g" });
 
-    const contents = { "complete-file": completeReport(COMPLETE_ROW_WAGYU) };
+    const contents = { "complete-file": await completeWagyuBuffer() };
     const tree = {
       ...treeWithBothFiles,
-      desperdicios: [{ id: "complete-file", name: "Desperdicio_Completo.pdf", type: "file" as const }],
+      desperdicios: [{ id: "complete-file", name: "Desperdicio_Completo.xlsx", type: "file" as const }],
     };
     const drive = fakeDrive(tree, contents);
 
-    const first = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
-    const second = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const first = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
+    const second = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(first.processed).toHaveLength(1);
     expect(second.processed).toHaveLength(0);
-    expect(second.skippedAlreadyProcessed).toEqual([{ fileId: "complete-file", fileName: "Desperdicio_Completo.pdf" }]);
+    expect(second.skippedAlreadyProcessed).toEqual([{ fileId: "complete-file", fileName: "Desperdicio_Completo.xlsx" }]);
 
     const totals = await inventoryMovementRepo.sumSince(db, supplyW.id, new Date(0));
     expect(totals.waste).toBe(1); // not 2 — the second run didn't reprocess the file
@@ -183,11 +160,11 @@ describe("ingestDailyWaste", () => {
     const testStore = await createTestStore(db);
     const tree = {
       ...treeWithBothFiles,
-      desperdicios: [{ id: "incomplete-file", name: "Desperdicio_Incompleto.pdf", type: "file" as const }],
+      desperdicios: [{ id: "incomplete-file", name: "Desperdicio_Incompleto.xlsx", type: "file" as const }],
     };
-    const drive = fakeDrive(tree, { "incomplete-file": EMPTY_REPORT });
+    const drive = fakeDrive(tree, { "incomplete-file": await buildEmptyWasteReportXlsx("Lista de Desperdício Incompleto") });
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.errors).toEqual([]);
     expect(result.processed).toHaveLength(1);
@@ -198,11 +175,11 @@ describe("ingestDailyWaste", () => {
     const testStore = await createTestStore(db);
     const tree = {
       ...treeWithBothFiles,
-      desperdicios: [{ id: "mystery-file", name: "relatorio_estranho.pdf", type: "file" as const }],
+      desperdicios: [{ id: "mystery-file", name: "relatorio_estranho.xlsx", type: "file" as const }],
     };
-    const drive = fakeDrive(tree, { "mystery-file": "irrelevant" });
+    const drive = fakeDrive(tree, { "mystery-file": Buffer.from("irrelevant") });
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.processed).toEqual([]);
     expect(result.errors).toHaveLength(1);
@@ -217,34 +194,35 @@ describe("ingestDailyWaste", () => {
     const tree = {
       ...treeWithBothFiles,
       desperdicios: [
-        { id: "complete-1", name: "Desperdicio_Completo.pdf", type: "file" as const },
-        { id: "complete-2", name: "Desperdicio_Completo (1).pdf", type: "file" as const },
+        { id: "complete-1", name: "Desperdicio_Completo.xlsx", type: "file" as const },
+        { id: "complete-2", name: "Desperdicio_Completo (1).xlsx", type: "file" as const },
       ],
     };
+    const wagyu = await completeWagyuBuffer();
     const contents = {
-      "complete-1": completeReport(COMPLETE_ROW_WAGYU),
-      "complete-2": completeReport(COMPLETE_ROW_WAGYU),
+      "complete-1": wagyu,
+      "complete-2": wagyu,
     };
     const drive = fakeDrive(tree, contents);
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.processed).toEqual([]);
     expect(result.errors).toHaveLength(2);
     expect(result.errors.every((e) => e.error.includes("ambíguo"))).toBe(true);
   });
 
-  it("reports malformed report text as a per-file error without blocking the other file", async () => {
+  it("reports a malformed report as a per-file error without blocking the other file", async () => {
     const testStore = await createTestStore(db);
     await createTestSupply(db, testStore.id, { code: "W", name: "Burger de Wagyu de 200g" });
 
     const contents = {
-      "complete-file": completeReport(COMPLETE_ROW_WAGYU),
-      "incomplete-file": "this text matches no known report format at all",
+      "complete-file": await completeWagyuBuffer(),
+      "incomplete-file": await buildUnrecognizedWasteReportXlsx(),
     };
     const drive = fakeDrive(treeWithBothFiles, contents);
 
-    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date, fakeExtractText);
+    const result = await ingestDailyWaste(db, drive, ROOT, testStore.id, date);
 
     expect(result.processed).toHaveLength(1);
     expect(result.processed[0]?.fileId).toBe("complete-file");

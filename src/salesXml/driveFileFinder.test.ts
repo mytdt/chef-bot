@@ -211,22 +211,22 @@ describe("findDailyReceiptFiles", () => {
 });
 
 describe("findDailyWasteFiles", () => {
-  it("classifies PDFs under desperdicios/ into complete/incomplete by filename", async () => {
+  it("classifies XLSXs under desperdicios/ into complete/incomplete by filename", async () => {
     const drive = fakeDriveApi({
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
       desperdicios: [
-        { id: "file-complete", name: "Desperdicio_Completo.pdf", type: "file" },
-        { id: "file-incomplete", name: "Desperdicio_Incompleto.pdf", type: "file" },
+        { id: "file-complete", name: "Desperdicio_Completo.xlsx", type: "file" },
+        { id: "file-incomplete", name: "Desperdicio_Incompleto.xlsx", type: "file" },
       ],
     });
 
     const result = await findDailyWasteFiles(drive, ROOT, date);
 
-    expect(result.complete).toEqual([{ id: "file-complete", name: "Desperdicio_Completo.pdf" }]);
-    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "Desperdicio_Incompleto.pdf" }]);
+    expect(result.complete).toEqual([{ id: "file-complete", name: "Desperdicio_Completo.xlsx" }]);
+    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "Desperdicio_Incompleto.xlsx" }]);
     expect(result.unrecognized).toEqual([]);
   });
 
@@ -239,12 +239,12 @@ describe("findDailyWasteFiles", () => {
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
-      desperdicios: [{ id: "file-incomplete", name: "relatorio_incompleto.pdf", type: "file" }],
+      desperdicios: [{ id: "file-incomplete", name: "relatorio_incompleto.xlsx", type: "file" }],
     });
 
     const result = await findDailyWasteFiles(drive, ROOT, date);
 
-    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "relatorio_incompleto.pdf" }]);
+    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "relatorio_incompleto.xlsx" }]);
     expect(result.complete).toEqual([]);
   });
 
@@ -254,12 +254,12 @@ describe("findDailyWasteFiles", () => {
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
-      desperdicios: [{ id: "file-mystery", name: "relatorio_estranho.pdf", type: "file" }],
+      desperdicios: [{ id: "file-mystery", name: "relatorio_estranho.xlsx", type: "file" }],
     });
 
     const result = await findDailyWasteFiles(drive, ROOT, date);
 
-    expect(result.unrecognized).toEqual([{ id: "file-mystery", name: "relatorio_estranho.pdf" }]);
+    expect(result.unrecognized).toEqual([{ id: "file-mystery", name: "relatorio_estranho.xlsx" }]);
     expect(result.complete).toEqual([]);
     expect(result.incomplete).toEqual([]);
   });
@@ -271,8 +271,8 @@ describe("findDailyWasteFiles", () => {
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
       desperdicios: [
-        { id: "file-1", name: "Desperdicio_Completo.pdf", type: "file" },
-        { id: "file-2", name: "Desperdicio_Completo (1).pdf", type: "file" },
+        { id: "file-1", name: "Desperdicio_Completo.xlsx", type: "file" },
+        { id: "file-2", name: "Desperdicio_Completo (1).xlsx", type: "file" },
       ],
     });
 
@@ -281,21 +281,22 @@ describe("findDailyWasteFiles", () => {
     expect(result.complete).toHaveLength(2);
   });
 
-  it("excludes non-.pdf files even if they contain a recognized keyword", async () => {
+  it("excludes non-.xlsx files even if they contain a recognized keyword", async () => {
     const drive = fakeDriveApi({
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
       desperdicios: [
-        { id: "file-1", name: "Desperdicio_Completo.pdf", type: "file" },
-        { id: "backup", name: "Desperdicio_Completo.pdf.bak", type: "file" },
+        { id: "file-1", name: "Desperdicio_Completo.xlsx", type: "file" },
+        { id: "backup", name: "Desperdicio_Completo.xlsx.bak", type: "file" },
+        { id: "legacy-pdf", name: "Desperdicio_Completo.pdf", type: "file" },
       ],
     });
 
     const result = await findDailyWasteFiles(drive, ROOT, date);
 
-    expect(result.complete).toEqual([{ id: "file-1", name: "Desperdicio_Completo.pdf" }]);
+    expect(result.complete).toEqual([{ id: "file-1", name: "Desperdicio_Completo.xlsx" }]);
   });
 
   it("returns all-empty when the day folder has no desperdicios/ subfolder", async () => {

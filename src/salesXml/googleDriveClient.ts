@@ -34,7 +34,7 @@ async function collectStreamToBuffer(stream: Readable): Promise<Buffer> {
 /**
  * B3 bot integration: bridges the real googleapis client to the narrow DriveFilesApi +
  * DriveFileContentApi + DriveFileBinaryContentApi interfaces salesXml/*.ts and
- * wastePdf/*.ts are written against. Isolated here (rather than in index.ts) because
+ * wasteXlsx/*.ts are written against. Isolated here (rather than in index.ts) because
  * this is the one module allowed to know about real googleapis types.
  *
  * `files.get({ alt: "media" })` only has a typed overload for `responseType: "stream"`
@@ -42,7 +42,7 @@ async function collectStreamToBuffer(stream: Readable): Promise<Buffer> {
  * DriveFileContentApi implied) — every download goes through the same stream-collecting
  * helper, then each of the two API shapes decides what to do with the resulting Buffer:
  * `get()` decodes it as UTF-8 text (correct for XML), `getBinary()` returns it as-is
- * (required for PDFs — UTF-8-decoding binary content would corrupt it).
+ * (required for XLSX — UTF-8-decoding binary content would corrupt it).
  */
 export function createDriveFilesAndContentApi(
   serviceAccountKeyRaw: string,

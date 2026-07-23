@@ -14,10 +14,10 @@ export async function downloadFileContent(files: DriveFileContentApi, fileId: st
 
 /**
  * Separate from DriveFileContentApi: that interface always decodes the response as
- * UTF-8 text, which is correct for XML (B1/B5) but would corrupt binary content — a
- * PDF (B6) run through `.toString("utf-8")` is not recoverable, since arbitrary binary
- * bytes aren't valid UTF-8. wastePdf/dailyWasteIngestion.ts needs the raw bytes to hand
- * to `pdf-parse`, not a mangled string.
+ * UTF-8 text, which is correct for XML (B1/B5) but would corrupt binary content — an
+ * XLSX (B6) run through `.toString("utf-8")` is not recoverable, since arbitrary binary
+ * bytes aren't valid UTF-8. wasteXlsx/dailyWasteIngestion.ts needs the raw bytes to hand
+ * to exceljs, not a mangled string.
  */
 export interface DriveFileBinaryContentApi {
   getBinary(fileId: string): Promise<Buffer>;
