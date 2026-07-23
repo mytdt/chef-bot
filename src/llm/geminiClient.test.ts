@@ -8,7 +8,13 @@ describe("createGeminiParser", () => {
         functionCalls: [
           {
             name: "record_count_items",
-            args: { date: "2026-07-22", items: [{ supply: "G", quantity: 742 }] },
+            args: {
+              date: "2026-07-22",
+              locations: [
+                { location: "mezanino", lines: [{ supplyRaw: "G", quantity: 742, unitKind: "unit" }] },
+                { location: "cozinha", lines: [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }] },
+              ],
+            },
           },
         ],
       }),
@@ -18,7 +24,13 @@ describe("createGeminiParser", () => {
     const result = await parser.parse("742 G");
 
     expect(result).toEqual({
-      data: { date: "2026-07-22", items: [{ supply: "G", quantity: 742 }] },
+      data: {
+        date: "2026-07-22",
+        locations: [
+          { location: "mezanino", lines: [{ supplyRaw: "G", quantity: 742, unitKind: "unit" }] },
+          { location: "cozinha", lines: [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }] },
+        ],
+      },
       provider: "gemini",
     });
   });

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import * as awaitingIngestionCountRepo from "src/persistence/repositories/awaitingIngestionCountRepo.js";
 import { createTestRoutine, createTestStore, getTestDb, resetDatabase } from "src/persistence/repositories/testUtils.js";
+import { testAggregatedItem } from "src/test/countFixtures.js";
 
 const db = getTestDb();
 
@@ -20,7 +21,7 @@ async function newEntry(storeId: string, routineId: string, overrides: { date?: 
     chatId: "555",
     rawText: "10 G",
     date: overrides.date ?? "2026-07-22",
-    items: [{ supply: "G", quantity: 10, actualQuantity: null }],
+    items: [testAggregatedItem("G", 10)],
     llmUsed: "claude",
   });
 }
@@ -34,7 +35,7 @@ describe("awaitingIngestionCountRepo", () => {
 
     const listed = await awaitingIngestionCountRepo.listByStoreAndDate(db, testStore.id, "2026-07-22");
     expect(listed.map((entry) => entry.id)).toEqual([created.id]);
-    expect(listed[0]?.items).toEqual([{ supply: "G", quantity: 10, actualQuantity: null }]);
+    expect(listed[0]?.items).toEqual([testAggregatedItem("G", 10)]);
   });
 
   it("does not list entries for a different date", async () => {

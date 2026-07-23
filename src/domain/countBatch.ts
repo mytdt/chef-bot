@@ -1,6 +1,6 @@
 import type { Context, Telegraf } from "telegraf";
 import type { Db } from "src/persistence/db.js";
-import type { CountItem } from "src/bot/parse.schema.js";
+import type { AggregatedCountItem } from "src/bot/parse.schema.js";
 import type { LlmProvider } from "src/domain/types.js";
 import { processCountItem } from "src/domain/count.js";
 import { postAlertToGroup } from "src/bot/handlers/alert.js";
@@ -17,6 +17,8 @@ export interface CountBatchSummary {
  * ingestion-resume path (domain/ingestionResume.ts, B3 bot integration) — both process
  * a confirmed batch of items the same way, they just differ in what to do with the
  * resulting summary (reply inline vs. send a fresh message once ingestion catches up).
+ *
+ * `items` are already post-conversion aggregates (awaiting stores that shape too).
  */
 export async function processConfirmedItems(
   db: Db,
@@ -27,7 +29,7 @@ export async function processConfirmedItems(
     collaboratorTelegramId: string;
     rawText: string;
     llmUsed: LlmProvider;
-    items: CountItem[];
+    items: AggregatedCountItem[];
   },
 ): Promise<CountBatchSummary> {
   const summary: CountBatchSummary = { matched: [], notMatched: [], invalidQuantities: [], notFound: [] };

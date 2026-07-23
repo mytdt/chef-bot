@@ -1,0 +1,1 @@
+ALTER TABLE "count" ADD COLUMN "location_breakdown" jsonb;

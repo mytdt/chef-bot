@@ -1,6 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "src/persistence/db.js";
 import type { LlmProvider } from "src/domain/types.js";
+import type { CountLocationBreakdown } from "src/persistence/schema.js";
 import { count } from "src/persistence/schema.js";
 
 export interface NewCount {
@@ -10,6 +11,7 @@ export interface NewCount {
   rawText: string;
   reportedValue: number;
   actualQuantityReported: number | null;
+  locationBreakdown: CountLocationBreakdown | null;
   expectedValue: number;
   matched: boolean;
   confirmedByCollaborator: boolean;
@@ -18,7 +20,14 @@ export interface NewCount {
 
 // rawText is immutable: every count creates a new record, never an update.
 export async function insert(db: Db, data: NewCount) {
-  const [created] = await db.insert(count).values({ ...data, llmUsed: data.llmUsed ?? "claude" }).returning();
+  const [created] = await db
+    .insert(count)
+    .values({
+      ...data,
+      llmUsed: data.llmUsed ?? "claude",
+      locationBreakdown: data.locationBreakdown ?? null,
+    })
+    .returning();
   if (!created) {
     throw new Error("Failed to insert count.");
   }

@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
-import type { ParsedCount } from "src/bot/parse.schema.js";
+import type { AggregatedCountItem } from "src/bot/parse.schema.js";
 import type { LlmProvider } from "src/domain/types.js";
 
 export interface PendingCount {
   chatId: number;
   collaboratorTelegramId: string;
   rawText: string;
-  parse: ParsedCount;
+  /** YYYY-MM-DD from the parse — needed when parking for ingestion. */
+  date: string;
+  /** Post-conversion aggregated items (same shape stored on Count / awaiting). */
+  items: AggregatedCountItem[];
   llmUsed: LlmProvider;
 }
 

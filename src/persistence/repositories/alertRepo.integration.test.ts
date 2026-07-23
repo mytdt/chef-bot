@@ -29,6 +29,7 @@ async function createTestCount(storeId: string) {
     rawText: "380 W",
     reportedValue: 380,
     actualQuantityReported: null,
+    locationBreakdown: null,
     expectedValue: 400,
     matched: false,
     confirmedByCollaborator: true,

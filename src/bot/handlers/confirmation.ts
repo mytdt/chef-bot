@@ -43,7 +43,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
     // deducted). Park it instead of comparing against an incomplete picture; an admin
     // running /ingest_xml later resumes it automatically (ingestionResume.ts), since
     // that command always runs all three types together for the date it's given.
-    const ingested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, pendingCount.parse.date);
+    const ingested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, pendingCount.date);
     if (!ingested) {
       await awaitingIngestionCountRepo.insert(db, {
         storeId: activeStore.id,
@@ -51,12 +51,12 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
         collaboratorTelegramId: pendingCount.collaboratorTelegramId,
         chatId: String(pendingCount.chatId),
         rawText: pendingCount.rawText,
-        date: pendingCount.parse.date,
-        items: pendingCount.parse.items,
+        date: pendingCount.date,
+        items: pendingCount.items,
         llmUsed: pendingCount.llmUsed,
       });
       await ctx.reply(
-        `⏳ Ainda não recebi todos os dados de ${pendingCount.parse.date} (venda, recebimento e desperdício) — vou processar sua contagem automaticamente assim que um admin rodar a ingestão. Não precisa reenviar.`,
+        `⏳ Ainda não recebi todos os dados de ${pendingCount.date} (venda, recebimento e desperdício) — vou processar sua contagem automaticamente assim que um admin rodar a ingestão. Não precisa reenviar.`,
       );
       return;
     }
@@ -67,7 +67,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
       collaboratorTelegramId: pendingCount.collaboratorTelegramId,
       rawText: pendingCount.rawText,
       llmUsed: pendingCount.llmUsed,
-      items: pendingCount.parse.items,
+      items: pendingCount.items,
     });
 
     await ctx.reply(formatCountBatchReply(summary));

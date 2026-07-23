@@ -14,6 +14,7 @@ import {
   getTestDb,
   resetDatabase,
 } from "src/persistence/repositories/testUtils.js";
+import { testAggregatedItem } from "src/test/countFixtures.js";
 
 const db = getTestDb();
 const ADMIN_ID = 111222333;
@@ -146,7 +147,7 @@ describe("registerIngestXmlCommand", () => {
       chatId: "555",
       rawText: "10 G",
       date: "2026-07-18",
-      items: [{ supply: "G", quantity: 10, actualQuantity: null }],
+      items: [testAggregatedItem("G", 10)],
       llmUsed: "claude",
     });
 
@@ -172,7 +173,7 @@ describe("registerIngestXmlCommand", () => {
       chatId: "555",
       rawText: "10 G",
       date: "2026-07-18",
-      items: [{ supply: "G", quantity: 10, actualQuantity: null }],
+      items: [testAggregatedItem("G", 10)],
       llmUsed: "claude",
     });
 

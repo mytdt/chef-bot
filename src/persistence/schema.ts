@@ -64,7 +64,12 @@ export const supply = pgTable("supply", {
   // B5: fixed master data for converting a receiving note's boxes (NFe mod 55, `uCom:
   // "CX"`) into the same units used elsewhere (F=54, G=36, W=30, confirmed 22/07) — not
   // derived from free-text product parsing, which is fragile. Null for supplies that
-  // aren't received by the box (e.g. Chicken/Vegetariano, D5 variable-quantity packages).
+  // aren't received by the box (e.g. Chicken/Vegetariano). Distinct from count-message
+  // package→unit factors (domain/countPackageFactors.ts) — do not reuse this column there.
+  //
+  // `unit` is a display/master-data hint only: the truth of whether a count *line* is a
+  // package or a unit comes from the message's unitKind (PCT/CX vs bare), not this field
+  // (Chicken/Vegetariano appear both ways in the same count).
   unitsPerBox: integer("units_per_box"),
   active: boolean("active").notNull().default(true),
 });
@@ -81,6 +86,23 @@ export const routine = pgTable("routine", {
   active: boolean("active").notNull().default(true),
 });
 
+/**
+ * Per-location detail for a Count (S1). Null on baseline/seed-manual rows and any
+ * pre-feature counts — `reportedValue` alone remains the aggregate used by expected.
+ * Comparison never reads this column.
+ */
+export type CountLocationBreakdown = {
+  mezanino: { units: number; lines: CountLocationBreakdownLine[] };
+  cozinha: { units: number; lines: CountLocationBreakdownLine[] };
+};
+
+export type CountLocationBreakdownLine = {
+  supplyRaw: string;
+  quantity: number;
+  unitKind: "unit" | "package";
+  units: number;
+};
+
 export const count = pgTable("count", {
   id: uuid("id").primaryKey().defaultRandom(),
   routineId: uuid("routine_id")
@@ -91,8 +113,14 @@ export const count = pgTable("count", {
     .references(() => supply.id),
   collaboratorTelegramId: text("collaborator_telegram_id").notNull(),
   rawText: text("raw_text").notNull(),
+  // Aggregate units across Mezanino+Cozinha (post package→unit conversion). Still the
+  // only quantity the expected-value formula / match decision use.
   reportedValue: quantity("reported_value").notNull(),
+  // D5: optional override of the *aggregate* total (not per-location). Coexists with
+  // fixed count-package factors — factors convert lines; this overrides the final total.
   actualQuantityReported: quantity("actual_quantity_reported"),
+  // Audit/D1 detail only. Null for seed-manual baseline rows (no backfill required).
+  locationBreakdown: jsonb("location_breakdown").$type<CountLocationBreakdown>(),
   expectedValue: quantity("expected_value").notNull(),
   matched: boolean("matched").notNull(),
   confirmedByCollaborator: boolean("confirmed_by_collaborator").notNull().default(false),
@@ -218,9 +246,20 @@ export const awaitingIngestionCount = pgTable("awaiting_ingestion_count", {
   chatId: text("chat_id").notNull(),
   rawText: text("raw_text").notNull(),
   date: date("date").notNull(),
-  // Mirrors bot/parse.schema.ts's CountItem shape — kept as an inline type instead of
-  // importing it, so the persistence layer doesn't depend on the bot layer.
-  items: jsonb("items").$type<{ supply: string; quantity: number; actualQuantity: number | null }[]>().notNull(),
+  // Post-conversion aggregated items (same shape persisted on Count) — raw nested parse
+  // is not re-stored here; rawText remains the source of truth for the original message.
+  // Pre-feature awaiting rows (flat CountItem) are discarded on deploy if any exist in
+  // staging — collaborator re-sends; see PR notes.
+  items: jsonb("items")
+    .$type<
+      {
+        supply: string;
+        quantity: number;
+        actualQuantity: number | null;
+        locationBreakdown: CountLocationBreakdown;
+      }[]
+    >()
+    .notNull(),
   // C5: preserved so resume after /ingest_xml still records which LLM produced the parse.
   llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

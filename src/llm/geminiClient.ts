@@ -13,17 +13,26 @@ const MODEL = "gemini-2.5-flash";
 // Same instructions given to Claude (claudeClient.ts) — kept in sync manually, not
 // shared as a constant, so each provider's prompt can be tuned independently if one
 // of the two starts misparsing something the other handles fine.
-// B3: today's date is interpolated in so the model can resolve "hoje" (or no date
-// mentioned) to YYYY-MM-DD — required by countParseSchema.
 function buildSystemPrompt(todayIso: string): string {
   return `You interpret free-text stock count messages from an employee at a burger restaurant
-(Burgers category), sent via Telegram. The format varies, but it's usually a list of
-"quantity + supply code" separated by slashes or commas, e.g.: "742 G / 689 F / 380 W / 9 PCT CHICKEN".
+(Burgers category), sent via Telegram. Real messages always have TWO location sections —
+MEZANINO and COZINHA — each with a slash-separated list of "quantity + supply token", e.g.:
 
-Extract each item from the message, preserving the supply code/name exactly as it appears in the text
-(do not translate or normalize it). If the employee explicitly mentions the actual quantity of a
-variable-quantity package (e.g., "opened the chicken package and it had 8.5"), fill in actualQuantity
-for that item; otherwise leave it out. Do not invent items that aren't in the text.
+ATUALIZAÇÃO DAS CARNES
+MEZANINO
+857 G / 836 F / 330 W / 0 CHORI / 9 PCT CHICKEN / 20 PCT VEGETARIANO
+COZINHA
+160 G / 112 F / 7 W / 5 VEGETARIANO / 11 CHORI / 8 PCT CHICKEN / 6 CHICKEN SESSÃO
+
+Extract BOTH locations. For each line:
+- supplyRaw: the supply token exactly as written (e.g. "G", "PCT CHICKEN", "CHICKEN SESSÃO") — do not normalize or translate.
+- quantity: the number before the token.
+- unitKind: "package" if the line has PCT or CX; otherwise "unit".
+Do NOT multiply package quantities, do NOT sum locations, do NOT merge "PCT CHICKEN" with "CHICKEN SESSÃO".
+
+If the employee explicitly mentions the actual total quantity of a variable-quantity package
+(e.g., "opened the chicken package and it had 8.5" / "real foram 170"), fill in actualQuantity
+on that line; otherwise leave it out. Do not invent items that aren't in the text.
 
 Today's date is ${todayIso} (YYYY-MM-DD). The message may mention which day the count is for (e.g.,
 "contagem de ontem", "22/07"); resolve it to YYYY-MM-DD format. If no date is mentioned, use today's
@@ -34,7 +43,7 @@ const PARSE_FUNCTION_NAME = "record_count_items";
 
 const PARSE_FUNCTION_DECLARATION: FunctionDeclaration = {
   name: PARSE_FUNCTION_NAME,
-  description: "Records the structured items extracted from the free-text count message.",
+  description: "Records the structured locations/lines extracted from the free-text count message.",
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -42,30 +51,47 @@ const PARSE_FUNCTION_DECLARATION: FunctionDeclaration = {
         type: Type.STRING,
         description: "The date this count is for, in YYYY-MM-DD format.",
       },
-      items: {
+      locations: {
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
           properties: {
-            supply: {
+            location: {
               type: Type.STRING,
-              description: "Supply code or name exactly as it appears in the text (e.g., G, F, W, PCT CHICKEN)",
+              description: 'Which stock location this block is for: "mezanino" or "cozinha".',
             },
-            quantity: {
-              type: Type.NUMBER,
-              description: "Reported quantity for this supply",
-            },
-            actualQuantity: {
-              type: Type.NUMBER,
-              description:
-                "Actual quantity reported by the employee when opening a variable-quantity package, if explicitly mentioned. Omit otherwise.",
+            lines: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  supplyRaw: {
+                    type: Type.STRING,
+                    description: "Supply token exactly as in the text (e.g. G, PCT CHICKEN, CHICKEN SESSÃO)",
+                  },
+                  quantity: {
+                    type: Type.NUMBER,
+                    description: "Reported quantity for this line (no conversion)",
+                  },
+                  unitKind: {
+                    type: Type.STRING,
+                    description: 'package if PCT/CX present on the line; unit otherwise',
+                  },
+                  actualQuantity: {
+                    type: Type.NUMBER,
+                    description:
+                      "Rare D5 override: actual aggregate quantity if explicitly mentioned for this supply. Omit otherwise.",
+                  },
+                },
+                required: ["supplyRaw", "quantity", "unitKind"],
+              },
             },
           },
-          required: ["supply", "quantity"],
+          required: ["location", "lines"],
         },
       },
     },
-    required: ["date", "items"],
+    required: ["date", "locations"],
   },
 };
 

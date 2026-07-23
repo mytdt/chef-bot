@@ -25,6 +25,7 @@ async function baseCount(overrides: Partial<NewCount> & { routineId: string; sup
     rawText: "742 G",
     reportedValue: 742,
     actualQuantityReported: null,
+    locationBreakdown: null,
     expectedValue: 742,
     matched: true,
     confirmedByCollaborator: true,

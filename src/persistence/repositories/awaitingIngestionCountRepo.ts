@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "src/persistence/db.js";
-import type { CountItem } from "src/bot/parse.schema.js";
+import type { AggregatedCountItem } from "src/bot/parse.schema.js";
 import type { LlmProvider } from "src/domain/types.js";
 import { awaitingIngestionCount } from "src/persistence/schema.js";
 
@@ -11,7 +11,8 @@ export interface NewAwaitingIngestionCount {
   chatId: string;
   rawText: string;
   date: string;
-  items: CountItem[];
+  /** Post-conversion aggregates — same shape as Count insert / pending confirmation. */
+  items: AggregatedCountItem[];
   llmUsed: LlmProvider;
 }
 

@@ -10,6 +10,7 @@ import {
   getTestDb,
   resetDatabase,
 } from "src/persistence/repositories/testUtils.js";
+import { testAggregatedItem } from "src/test/countFixtures.js";
 
 const db = getTestDb();
 
@@ -41,7 +42,7 @@ describe("resumeAwaitingCounts", () => {
       chatId: "555",
       rawText: "10 G",
       date: "2026-07-22",
-      items: [{ supply: "G", quantity: 10, actualQuantity: null }],
+      items: [testAggregatedItem("G", 10)],
       llmUsed: "claude",
     });
 
@@ -76,7 +77,7 @@ describe("resumeAwaitingCounts", () => {
       chatId: "555",
       rawText: "10 G",
       date: "2026-07-21",
-      items: [{ supply: "G", quantity: 10, actualQuantity: null }],
+      items: [testAggregatedItem("G", 10)],
       llmUsed: "claude",
     });
 

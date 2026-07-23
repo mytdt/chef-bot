@@ -3,18 +3,11 @@ import { message } from "telegraf/filters";
 import type { LLMParser } from "src/llm/llmParser.js";
 import { parseCountText } from "src/bot/parse.js";
 import { storePending } from "src/bot/pendingCounts.js";
+import { aggregateParsedCount } from "src/domain/aggregateParsedCount.js";
+import { formatCountConfirmationSummary } from "src/bot/formatCountConfirmation.js";
 
 export interface CountHandlerDeps {
   llmParser: LLMParser;
-}
-
-function formatSummary(items: { supply: string; quantity: number; actualQuantity: number | null }[]): string {
-  return items
-    .map((item) => {
-      const actual = item.actualQuantity !== null ? ` (real informada: ${item.actualQuantity})` : "";
-      return `• ${item.supply}: ${item.quantity}${actual}`;
-    })
-    .join("\n");
 }
 
 /**
@@ -39,7 +32,15 @@ export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerD
     } catch (error) {
       console.error("Failed to parse count via LLM:", error);
       await ctx.reply(
-        "Não consegui interpretar essa contagem. Pode reenviar no formato usual (ex.: 742 G / 689 F / 380 W)?",
+        "Não consegui interpretar essa contagem. Pode reenviar no formato usual (Mezanino + Cozinha, ex.: 857 G / …)?",
+      );
+      return;
+    }
+
+    const aggregation = aggregateParsedCount(parseResult.parse);
+    if (aggregation.items.length === 0) {
+      await ctx.reply(
+        "Entendi a mensagem, mas nenhum item ficou utilizável após a conversão (PCT sem fator ou insumo desconhecido). Pode reenviar?",
       );
       return;
     }
@@ -48,11 +49,12 @@ export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerD
       chatId: ctx.chat.id,
       collaboratorTelegramId,
       rawText: text,
-      parse: parseResult.parse,
+      date: parseResult.parse.date,
+      items: aggregation.items,
       llmUsed: parseResult.llmUsed,
     });
 
-    await ctx.reply(`Entendi:\n${formatSummary(parseResult.parse.items)}\n\nConfirma?`, {
+    await ctx.reply(formatCountConfirmationSummary(parseResult.parse.date, aggregation), {
       reply_markup: {
         inline_keyboard: [
           [

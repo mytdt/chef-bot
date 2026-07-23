@@ -15,17 +15,13 @@ import {
   getTestDb,
   resetDatabase,
 } from "src/persistence/repositories/testUtils.js";
+import { testAggregatedItem, testParsedLocations } from "src/test/countFixtures.js";
 
 const db = getTestDb();
 const COLLABORATOR_ID = 111222333;
 const COUNT_ROUTINE_NAME = "Contagem de Carne";
-// B3 bot integration: countParseSchema now requires a date — tests that exercise the
-// normal (already-ingested) path record a dailyIngestionRun for this date up front.
 const TEST_DATE = "2026-07-22";
 
-// 2026-07-22: the "estado de espera" now requires all three ingestion types (not just
-// sale) recorded for a date before a count can be compared — see
-// confirmation.ts/dailyIngestionRunRepo.hasAllTypesRunForDate.
 async function recordAllTypesIngested(storeId: string): Promise<void> {
   await dailyIngestionRunRepo.recordRun(db, storeId, TEST_DATE, "sale");
   await dailyIngestionRunRepo.recordRun(db, storeId, TEST_DATE, "receipt");
@@ -41,26 +37,19 @@ afterAll(async () => {
 });
 
 afterEach(() => {
-  // Telegram.prototype.callApi is a shared prototype-level spy (see stubTelegramApi) —
-  // must be restored after each test so it doesn't leak into unrelated test files.
   vi.restoreAllMocks();
 });
 
-// Fake LLMParser: exercises the real bot/parse.ts + Zod validation without hitting any
-// real LLM API (Claude or Gemini) — see llm/llmParser.ts for the interface.
-function fakeLlmParser(
-  items: { supply: string; quantity: number; actualQuantity?: number | null }[],
-  date: string = TEST_DATE,
-): LLMParser {
+function fakeLlmParser(supply: string, totalQuantity: number, date: string = TEST_DATE): LLMParser {
+  // Put the whole quantity in mezanino; cozinha 0 — aggregate equals totalQuantity.
   return {
-    parse: vi.fn().mockResolvedValue({ data: { date, items }, provider: "claude" }),
+    parse: vi.fn().mockResolvedValue({
+      data: testParsedLocations(supply, totalQuantity, 0, date),
+      provider: "claude",
+    }),
   };
 }
 
-// Records every outbound Telegram API call instead of hitting the network, and returns
-// just enough of a response shape for Telegraf to keep going. Telegraf builds a *new*
-// Telegram instance per handleUpdate() call (see telegraf.js handleUpdate), so the spy
-// must live on the shared prototype, not on a single bot.telegram instance.
 function stubTelegramApi() {
   let nextMessageId = 1;
   const calls: { method: string; payload: Record<string, unknown> }[] = [];
@@ -120,18 +109,23 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("replies 'tudo certo' and does not post an alert when the count matches the expected value", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    const testSupply = await createTestSupply(db, testStore.id, { code: "TestBurger", name: "TestBurger" });
+    const testSupply = await createTestSupply(db, testStore.id, { code: "G", name: "Burger G" });
     await inventoryMovementRepo.insert(db, { supplyId: testSupply.id, type: "receipt", quantity: 100 });
     await recordAllTypesIngested(testStore.id);
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger", quantity: 100 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser("G", 100) });
     registerConfirmationHandler(bot, db);
 
-    await bot.handleUpdate(textMessageUpdate("100 TestBurger", 555));
+    await bot.handleUpdate(textMessageUpdate("100 G", 555));
     const confirmData = callbackDataFromLastReply(calls);
     expect(confirmData).toMatch(/^confirm:/);
+
+    const d1Text = String(calls.filter((c) => c.method === "sendMessage").at(-1)?.payload.text ?? "");
+    expect(d1Text).toContain("MEZANINO");
+    expect(d1Text).toContain("COZINHA");
+    expect(d1Text).toContain("TOTAIS (comparação)");
 
     await bot.handleUpdate(callbackQueryUpdate(confirmData, 555));
 
@@ -143,16 +137,15 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("posts an alert to the store group and does not reveal the expected value when the count doesn't match", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { code: "TestBurger2", name: "TestBurger2" });
-    // No movements recorded -> expected value is 0; reporting 50 is a mismatch.
+    await createTestSupply(db, testStore.id, { code: "F", name: "Burger F" });
     await recordAllTypesIngested(testStore.id);
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger2", quantity: 50 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser("F", 50) });
     registerConfirmationHandler(bot, db);
 
-    await bot.handleUpdate(textMessageUpdate("50 TestBurger2", 555));
+    await bot.handleUpdate(textMessageUpdate("50 F", 555));
     const confirmData = callbackDataFromLastReply(calls);
 
     await bot.handleUpdate(callbackQueryUpdate(confirmData, 555));
@@ -161,8 +154,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
       (c) => c.method === "sendMessage" && typeof c.payload.text === "string" && c.payload.text.includes("@all"),
     );
     expect(groupAlert).toBeDefined();
-    expect(groupAlert?.payload.text).not.toMatch(/\b0\b/); // expected value (0) never appears in the alert text
-    // C6: the alert is a one-shot message — no acknowledge button.
+    expect(groupAlert?.payload.text).not.toMatch(/\b0\b/);
     expect(groupAlert?.payload.reply_markup).toBeUndefined();
 
     const confirmationReply = calls.filter((c) => c.method === "sendMessage").at(-1);
@@ -172,15 +164,14 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("parks the count as awaiting ingestion (does not compare/alert) when none of the date's ingestion types have run yet", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { code: "TestBurger4", name: "TestBurger4" });
-    // Deliberately no dailyIngestionRunRepo.recordRun for TEST_DATE.
+    await createTestSupply(db, testStore.id, { code: "W", name: "Burger W" });
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger4", quantity: 10 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser("W", 10) });
     registerConfirmationHandler(bot, db);
 
-    await bot.handleUpdate(textMessageUpdate("10 TestBurger4", 555));
+    await bot.handleUpdate(textMessageUpdate("10 W", 555));
     await bot.handleUpdate(callbackQueryUpdate(callbackDataFromLastReply(calls), 555));
 
     const finalReply = calls.filter((c) => c.method === "sendMessage").at(-1);
@@ -190,7 +181,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
 
     const waiting = await awaitingIngestionCountRepo.listByStoreAndDate(db, testStore.id, TEST_DATE);
     expect(waiting).toHaveLength(1);
-    expect(waiting[0]?.items).toEqual([{ supply: "TestBurger4", quantity: 10, actualQuantity: null }]);
+    expect(waiting[0]?.items).toEqual([testAggregatedItem("W", 10)]);
     expect(waiting[0]?.chatId).toBe("555");
     expect(waiting[0]?.llmUsed).toBe("claude");
   });
@@ -198,17 +189,15 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
   it("parks the count as awaiting ingestion when only some of the date's ingestion types have run (not just sale)", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { code: "TestBurger5", name: "TestBurger5" });
-    // Sale ran, but receipt/waste didn't — this used to be enough to release the count
-    // (the gate only checked "any ingestion ran"); now it must still park.
+    await createTestSupply(db, testStore.id, { code: "CHORI", name: "Chori" });
     await dailyIngestionRunRepo.recordRun(db, testStore.id, TEST_DATE, "sale");
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger5", quantity: 10 }]) });
+    registerCountHandler(bot, { llmParser: fakeLlmParser("CHORI", 10) });
     registerConfirmationHandler(bot, db);
 
-    await bot.handleUpdate(textMessageUpdate("10 TestBurger5", 555));
+    await bot.handleUpdate(textMessageUpdate("10 CHORI", 555));
     await bot.handleUpdate(callbackQueryUpdate(callbackDataFromLastReply(calls), 555));
 
     const finalReply = calls.filter((c) => c.method === "sendMessage").at(-1);

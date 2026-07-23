@@ -70,9 +70,11 @@ async function main() {
     // Assumed fixed-quantity like F/G/W (no D5 variable-quantity flag was given for it) —
     // flag this to Emanoel if that assumption is wrong.
     { code: "CHORI", name: "Chori Burguer", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: null },
-    // Chicken and Vegetariano: variable-quantity packages (D5) — defaultPackageQuantity
-    // is null by design. Names/units stay in Portuguese: this is seed *data* (product
-    // info the team recognizes in bot messages), not code.
+    // Chicken and Vegetariano: `unit` stays "pacote" as display/master-data hint only —
+    // count lines may be package (PCT) or unit (e.g. CHICKEN SESSÃO / bare VEGETARIANO);
+    // the message's unitKind is the source of truth (see PLAN.md §8.8). D5
+    // actualQuantityReported still overrides the aggregated total when explicitly given.
+    // Count package→unit factors live in domain/countPackageFactors.ts (not unitsPerBox).
     { code: "CHICKEN", name: "Chicken", unit: "pacote", defaultPackageQuantity: null, unitsPerBox: null },
     { code: "VEGETARIANO", name: "Vegetariano", unit: "pacote", defaultPackageQuantity: null, unitsPerBox: null },
   ];

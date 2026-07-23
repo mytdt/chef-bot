@@ -1,6 +1,7 @@
 import type { Db } from "src/persistence/db.js";
-import type { CountItem } from "src/bot/parse.schema.js";
+import type { AggregatedCountItem } from "src/bot/parse.schema.js";
 import type { LlmProvider } from "src/domain/types.js";
+import type { CountLocationBreakdown } from "src/persistence/schema.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as countRepo from "src/persistence/repositories/countRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
@@ -22,7 +23,8 @@ export interface ProcessCountItemResult {
  * Orchestrates the creation of a Count for an item already confirmed by the
  * collaborator (D1): resolves the Supply, looks up the previous count + movements
  * since then, calculates the expected value, decides match/no-match and persists a
- * new immutable record.
+ * new immutable record. `item.quantity` is already the Mezanino+Cozinha aggregate in
+ * units; `item.actualQuantity` is the D5 override of that aggregate when present.
  */
 export async function processCountItem(
   db: Db,
@@ -32,7 +34,7 @@ export async function processCountItem(
     collaboratorTelegramId: string;
     rawText: string;
     llmUsed: LlmProvider;
-    item: CountItem;
+    item: AggregatedCountItem;
   },
 ): Promise<ProcessCountItemResult> {
   const { storeId, routineId, collaboratorTelegramId, rawText, llmUsed, item } = params;
@@ -75,6 +77,8 @@ export async function processCountItem(
     expectedValue,
   );
 
+  const locationBreakdown: CountLocationBreakdown = item.locationBreakdown;
+
   const countCreated = await countRepo.insert(db, {
     routineId,
     supplyId: supplyFound.id,
@@ -82,6 +86,7 @@ export async function processCountItem(
     rawText,
     reportedValue: item.quantity,
     actualQuantityReported: item.actualQuantity,
+    locationBreakdown,
     expectedValue,
     matched,
     confirmedByCollaborator: true,
