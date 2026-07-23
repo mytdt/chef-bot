@@ -5,7 +5,7 @@ import type { CountLocationBreakdown } from "src/persistence/schema.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as countRepo from "src/persistence/repositories/countRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
-import { calculateExpectedValue } from "src/calculation/expected.js";
+import { calculateExpectedValue, effectiveValue } from "src/calculation/expected.js";
 import { decideMatch } from "src/calculation/comparison.js";
 import { isValidQuantity } from "src/domain/quantityRules.js";
 
@@ -17,6 +17,9 @@ export interface ProcessCountItemResult {
   supplyName?: string;
   countId?: string;
   matched?: boolean;
+  /** Effective reported value used in decideMatch (D5 override when present). */
+  reportedValue?: number;
+  expectedValue?: number;
 }
 
 /**
@@ -72,10 +75,12 @@ export async function processCountItem(
     movements,
   );
 
-  const matched = decideMatch(
-    { reportedValue: item.quantity, actualQuantityReported: item.actualQuantity },
-    expectedValue,
-  );
+  const countForMatch = {
+    reportedValue: item.quantity,
+    actualQuantityReported: item.actualQuantity,
+  };
+  const reportedEffective = effectiveValue(countForMatch);
+  const matched = decideMatch(countForMatch, expectedValue);
 
   const locationBreakdown: CountLocationBreakdown = item.locationBreakdown;
 
@@ -100,5 +105,7 @@ export async function processCountItem(
     supplyName: supplyFound.name,
     countId: countCreated.id,
     matched,
+    reportedValue: reportedEffective,
+    expectedValue,
   };
 }

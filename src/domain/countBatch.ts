@@ -3,7 +3,10 @@ import type { Db } from "src/persistence/db.js";
 import type { AggregatedCountItem } from "src/bot/parse.schema.js";
 import type { LlmProvider } from "src/domain/types.js";
 import { processCountItem } from "src/domain/count.js";
-import { postAlertToGroup } from "src/bot/handlers/alert.js";
+import {
+  postConsolidatedAlertToGroup,
+  type CountMismatchAlertItem,
+} from "src/bot/handlers/alert.js";
 
 export interface CountBatchSummary {
   matched: string[];
@@ -19,6 +22,11 @@ export interface CountBatchSummary {
  * resulting summary (reply inline vs. send a fresh message once ingestion catches up).
  *
  * `items` are already post-conversion aggregates (awaiting stores that shape too).
+ *
+ * Group alert policy (amends original D1 blind-count): mismatches in the same batch
+ * produce ONE consolidated message to the store group with informed/expected/difference
+ * numbers (decision by Emanoel — see TRILHA-ENTREGAVEIS.md). The reply to the
+ * collaborator via formatCountBatchReply still cites supply names only.
  */
 export async function processConfirmedItems(
   db: Db,
@@ -33,6 +41,7 @@ export async function processConfirmedItems(
   },
 ): Promise<CountBatchSummary> {
   const summary: CountBatchSummary = { matched: [], notMatched: [], invalidQuantities: [], notFound: [] };
+  const mismatches: CountMismatchAlertItem[] = [];
 
   for (const item of params.items) {
     const result = await processCountItem(db, {
@@ -60,16 +69,30 @@ export async function processConfirmedItems(
       summary.matched.push(displayName);
     } else {
       summary.notMatched.push(displayName);
-      if (result.countId) {
-        await postAlertToGroup(bot, db, { countId: result.countId, supplyName: displayName });
+      if (
+        result.countId !== undefined &&
+        result.reportedValue !== undefined &&
+        result.expectedValue !== undefined
+      ) {
+        mismatches.push({
+          countId: result.countId,
+          supplyName: displayName,
+          reportedValue: result.reportedValue,
+          expectedValue: result.expectedValue,
+          difference: result.reportedValue - result.expectedValue,
+        });
       }
     }
+  }
+
+  if (mismatches.length > 0) {
+    await postConsolidatedAlertToGroup(bot, db, mismatches);
   }
 
   return summary;
 }
 
-// Blind count: the reply to the collaborator never mentions the expected value.
+/** Immediate reply after confirmation — names only; numbers live in the group alert. */
 export function formatCountBatchReply(summary: CountBatchSummary): string {
   const parts: string[] = [];
   if (summary.matched.length > 0) {
