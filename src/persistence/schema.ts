@@ -48,31 +48,37 @@ export const store = pgTable("store", {
   active: boolean("active").notNull().default(true),
 });
 
-export const supply = pgTable("supply", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  storeId: uuid("store_id")
-    .notNull()
-    .references(() => store.id),
-  category: supplyCategoryEnum("category").notNull(),
-  // Short token collaborators actually type in free-text counts (e.g. "G", "F", "W") —
-  // distinct from `name`, the human-readable display name (e.g. "Burger de 160g").
-  // The LLM-parsed count flow matches on `code`; manual movement commands match on `name`.
-  code: text("code").notNull(),
-  name: text("name").notNull(),
-  unit: text("unit").notNull(),
-  defaultPackageQuantity: quantity("default_package_quantity"),
-  // B5: fixed master data for converting a receiving note's boxes (NFe mod 55, `uCom:
-  // "CX"`) into the same units used elsewhere (F=54, G=36, W=30, confirmed 22/07) — not
-  // derived from free-text product parsing, which is fragile. Null for supplies that
-  // aren't received by the box (e.g. Chicken/Vegetariano). Distinct from count-message
-  // package→unit factors (domain/countPackageFactors.ts) — do not reuse this column there.
-  //
-  // `unit` is a display/master-data hint only: the truth of whether a count *line* is a
-  // package or a unit comes from the message's unitKind (PCT/CX vs bare), not this field
-  // (Chicken/Vegetariano appear both ways in the same count).
-  unitsPerBox: integer("units_per_box"),
-  active: boolean("active").notNull().default(true),
-});
+export const supply = pgTable(
+  "supply",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storeId: uuid("store_id")
+      .notNull()
+      .references(() => store.id),
+    category: supplyCategoryEnum("category").notNull(),
+    // Short token collaborators actually type in free-text counts (e.g. "G", "F", "W") —
+    // distinct from `name`, the human-readable display name (e.g. "Burger de 160g").
+    // The LLM-parsed count flow matches on `code`; manual movement commands match on `name`.
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    unit: text("unit").notNull(),
+    defaultPackageQuantity: quantity("default_package_quantity"),
+    // Store-internal numeric SKU from back-office exports (receipts XLSX / waste incomplete).
+    // Nullable: burgers counted as G/F/W often have no numeric SKU yet. Receipt ingestion
+    // looks up by this field (findBySku), not by free-text `code`.
+    sku: integer("sku"),
+    // Legacy master data for box→unit conversion (NFe mod 55 path, removed). Kept nullable
+    // for now; receipt XLSX uses pre-converted "Qtd. Estoque" and does not read this.
+    // Distinct from count-message package→unit factors (domain/countPackageFactors.ts).
+    //
+    // `unit` is a display/master-data hint only: the truth of whether a count *line* is a
+    // package or a unit comes from the message's unitKind (PCT/CX vs bare), not this field
+    // (Chicken/Vegetariano appear both ways in the same count).
+    unitsPerBox: integer("units_per_box"),
+    active: boolean("active").notNull().default(true),
+  },
+  (table) => [unique().on(table.storeId, table.sku)],
+);
 
 export const routine = pgTable("routine", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -170,10 +176,10 @@ export const processedSalesFile = pgTable(
   (table) => [unique().on(table.storeId, table.driveFileId)],
 );
 
-// B5: same identity-based idempotency as processedSalesFile, for receiving notes (NFe
-// modelo 55) instead of sales NFC-e — a separate table (not a shared one with a `type`
-// discriminator) mirrors the existing table 1:1, keeping each ingestion type's tracking
-// independent and trivially easy to reason about.
+// B5: same identity-based idempotency as processedSalesFile, for supplier-notes XLSX
+// under recebimentos/ — a separate table (not a shared one with a `type` discriminator)
+// mirrors the existing table 1:1, keeping each ingestion type's tracking independent
+// and trivially easy to reason about.
 export const processedReceiptFile = pgTable(
   "processed_receipt_file",
   {

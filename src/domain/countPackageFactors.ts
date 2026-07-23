@@ -1,10 +1,10 @@
 /**
  * Count-message package → unit conversion factors (F1).
  *
- * Distinct from Supply.unitsPerBox (B5), which converts receiving-note *boxes* (NFe
- * modelo 55, uCom "CX") into stock units. These factors apply only when a count line
- * is marked as a package (PCT/CX in the free-text message). Do not reuse unitsPerBox
- * here, and do not store these in the DB for the MVP — change = code review + deploy.
+ * Distinct from legacy Supply.unitsPerBox (unused by receipt XLSX, which reads
+ * pre-converted "Qtd. Estoque"). These factors apply only when a count line is marked
+ * as a package (PCT/CX in the free-text message). Do not reuse unitsPerBox here, and
+ * do not store these in the DB for the MVP — change = code review + deploy.
  *
  * Chicken × 20 is an *approximation with a known low bias* (real packs often hold a
  * bit more than 20). Comparison stays exact anyway (human decision) — the bias is

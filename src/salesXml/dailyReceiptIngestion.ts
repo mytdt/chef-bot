@@ -1,8 +1,8 @@
 import type { Db } from "src/persistence/db.js";
 import * as processedReceiptFileRepo from "src/persistence/repositories/processedReceiptFileRepo.js";
 import { findDailyReceiptFiles, type DriveFilesApi } from "src/salesXml/driveFileFinder.js";
-import { downloadFileContent, type DriveFileContentApi } from "src/salesXml/driveFileContent.js";
-import { processNfeReceipt, type ProcessNfeReceiptResult } from "src/salesXml/receiptAdapter.js";
+import { downloadBinaryFileContent, type DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
+import { processReceiptReport, type ProcessReceiptReportResult } from "src/receiptXlsx/receiptAdapter.js";
 
 export interface ReceiptFileProcessingError {
   fileId: string;
@@ -13,7 +13,7 @@ export interface ReceiptFileProcessingError {
 export interface ReceiptFileProcessingSuccess {
   fileId: string;
   fileName: string;
-  result: ProcessNfeReceiptResult;
+  result: ProcessReceiptReportResult;
 }
 
 export interface IngestDailyReceiptsResult {
@@ -24,15 +24,14 @@ export interface IngestDailyReceiptsResult {
 }
 
 /**
- * B5: mirrors dailySalesIngestion.ts's ingestDailySales exactly (same manual-trigger
- * posture — D11 — same per-file error isolation, same identity-based idempotency), one
- * level down: receiving notes (NFe modelo 55) under `.../recebimentos/` instead of
- * sales NFC-e under `.../vendas/`. See ingestDailySales's comment for the full
- * reasoning behind each of these choices — not repeated here since it's identical.
+ * B5: ingests the daily supplier-notes XLSX under `.../recebimentos/` (replaces
+ * individual NFe mod 55 XMLs). Same manual-trigger posture (D11), per-file error
+ * isolation, and identity-based idempotency as dailySalesIngestion /
+ * dailyWasteIngestion. Binary download — exceljs needs raw bytes, not UTF-8 text.
  */
 export async function ingestDailyReceipts(
   db: Db,
-  files: DriveFilesApi & DriveFileContentApi,
+  files: DriveFilesApi & DriveFileBinaryContentApi,
   rootFolderId: string,
   storeId: string,
   date: Date,
@@ -54,8 +53,8 @@ export async function ingestDailyReceipts(
     }
 
     try {
-      const xmlContent = await downloadFileContent(files, file.id);
-      const receiptResult = await processNfeReceipt(db, storeId, xmlContent);
+      const xlsxBuffer = await downloadBinaryFileContent(files, file.id);
+      const receiptResult = await processReceiptReport(db, storeId, xlsxBuffer);
       await processedReceiptFileRepo.markProcessed(db, storeId, file.id);
       result.processed.push({ fileId: file.id, fileName: file.name, result: receiptResult });
     } catch (error) {

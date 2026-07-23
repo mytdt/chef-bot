@@ -230,18 +230,21 @@ describe("findDailyNfceFiles", () => {
 });
 
 describe("findDailyReceiptFiles", () => {
-  it("finds the .xml files under chef-bot/<year>/<month>/<day>/recebimentos/", async () => {
+  it("finds the .xlsx files under chef-bot/<year>/<month>/<day>/recebimentos/", async () => {
     const drive = fakeDriveApi({
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "day-18": [{ id: "recebimentos", name: "recebimentos", type: "folder" }],
-      recebimentos: [{ id: "file-1", name: "35260761559589-nfe.xml", type: "file" }],
+      recebimentos: [
+        { id: "file-1", name: "Notas_Fornecedores.xlsx", type: "file" },
+        { id: "file-xml", name: "legacy-nfe.xml", type: "file" },
+      ],
     });
 
     const result = await findDailyReceiptFiles(drive, ROOT, date);
 
-    expect(result).toEqual([{ id: "file-1", name: "35260761559589-nfe.xml" }]);
+    expect(result).toEqual([{ id: "file-1", name: "Notas_Fornecedores.xlsx" }]);
   });
 
   it("returns an empty array when the day folder has no recebimentos/ subfolder", async () => {

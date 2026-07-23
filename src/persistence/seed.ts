@@ -62,8 +62,8 @@ async function main() {
   // permission). F/G/W/CHICKEN/CHORI/VEGETARIANO are the exact codes collaborators type
   // in free-text counts.
   const realSupplies = [
-    // unitsPerBox (B5, confirmed 22/07): fixed conversion factor for receiving notes
-    // (NFe modelo 55, quantity in boxes) — null where receipt-by-box doesn't apply.
+    // unitsPerBox: legacy box→unit factor from the old NFe path (no longer used by
+    // receipt XLSX). Kept in seed for existing rows; null where it never applied.
     { code: "F", name: "Burger de 90g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 54 },
     { code: "G", name: "Burger de 160g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 36 },
     { code: "W", name: "Burger de Wagyu de 200g", unit: "unidade", defaultPackageQuantity: null, unitsPerBox: 30 },

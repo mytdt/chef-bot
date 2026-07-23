@@ -29,6 +29,16 @@ export async function findByCode(db: Db, storeId: string, code: string) {
   return found ?? null;
 }
 
+/** B5 receipt XLSX: look up by store-internal numeric SKU (Supply.sku). */
+export async function findBySku(db: Db, storeId: string, sku: number) {
+  const [found] = await db
+    .select()
+    .from(supply)
+    .where(and(eq(supply.storeId, storeId), eq(supply.sku, sku), eq(supply.active, true)))
+    .limit(1);
+  return found ?? null;
+}
+
 export async function listActiveByCategory(db: Db, storeId: string, category: SupplyCategory) {
   return db
     .select()

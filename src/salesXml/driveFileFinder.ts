@@ -165,8 +165,8 @@ export async function findDailyNfceFiles(files: DriveFilesApi, rootFolderId: str
 }
 
 /**
- * B5: locates the receiving-note .xml files (NFe modelo 55) for a given date, under
- * `chef-bot/<year>/<month>/<day>/recebimentos/*.xml`.
+ * B5: locates the supplier-notes XLSX for a given date, under
+ * `chef-bot/<year>/<month>/<day>/recebimentos/*.xlsx` (replaces individual NFe mod 55 XMLs).
  */
 export async function findDailyReceiptFiles(files: DriveFilesApi, rootFolderId: string, date: Date): Promise<DriveFileRef[]> {
   const dayFolderId = await findDayFolderId(files, rootFolderId, date);
@@ -177,7 +177,7 @@ export async function findDailyReceiptFiles(files: DriveFilesApi, rootFolderId: 
   if (!receiptsFolderId) {
     return [];
   }
-  return listFilesInFolder(files, receiptsFolderId, ".xml");
+  return listFilesInFolder(files, receiptsFolderId, ".xlsx");
 }
 
 export interface CategorizedWasteFiles {
