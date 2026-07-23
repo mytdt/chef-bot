@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDailyNfceFiles, type DriveFilesApi } from "src/salesXml/driveFileFinder.js";
+import { findDailyNfceFiles, findDailyReceiptFiles, findDailyWasteFiles, type DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 
 /**
  * No real Google Drive credential is available to this session
@@ -49,12 +49,13 @@ const ROOT = "root-folder-id";
 const date = new Date("2026-07-18T12:00:00-03:00");
 
 describe("findDailyNfceFiles", () => {
-  it("finds the .xml files under chef-bot/<year>/<month>/<day>/", async () => {
+  it("finds the .xml files under chef-bot/<year>/<month>/<day>/vendas/", async () => {
     const drive = fakeDriveApi({
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
-      "day-18": [
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }],
+      vendas: [
         { id: "file-1", name: "36177-1-4645600.xml", type: "file" },
         { id: "file-2", name: "36116-1-4642756.xml", type: "file" },
         { id: "not-xml", name: "readme.txt", type: "file" },
@@ -74,7 +75,8 @@ describe("findDailyNfceFiles", () => {
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-7", name: "7", type: "folder" }], // unpadded, no "07"
       "month-7": [{ id: "day-18", name: "18", type: "folder" }],
-      "day-18": [{ id: "file-1", name: "36177-1-4645600.xml", type: "file" }],
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }],
+      vendas: [{ id: "file-1", name: "36177-1-4645600.xml", type: "file" }],
     });
 
     const result = await findDailyNfceFiles(drive, ROOT, date);
@@ -91,8 +93,10 @@ describe("findDailyNfceFiles", () => {
       ],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
       "month-7": [{ id: "wrong-day-18", name: "18", type: "folder" }],
-      "day-18": [{ id: "file-1", name: "correct.xml", type: "file" }],
-      "wrong-day-18": [{ id: "file-2", name: "wrong.xml", type: "file" }],
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }],
+      "wrong-day-18": [{ id: "wrong-vendas", name: "vendas", type: "folder" }],
+      vendas: [{ id: "file-1", name: "correct.xml", type: "file" }],
+      "wrong-vendas": [{ id: "file-2", name: "wrong.xml", type: "file" }],
     });
 
     const result = await findDailyNfceFiles(drive, ROOT, date);
@@ -123,6 +127,24 @@ describe("findDailyNfceFiles", () => {
     expect(result).toEqual([]);
   });
 
+  it("returns an empty array when the day folder exists but has no vendas/ subfolder", async () => {
+    // The bug this whole fix addresses: PRs #9/#13 mergeated a version that listed
+    // .xml files directly in the day folder, never descending into vendas/ — against a
+    // real populated Drive folder (files ARE inside vendas/), that would silently find
+    // nothing. This test locks in the corrected behavior: no vendas/ subfolder -> empty
+    // result (not an error, and NOT a fallback to files sitting loose in the day folder).
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "file-1", name: "36177-1-4645600.xml", type: "file" }], // loose in day folder, no vendas/
+    });
+
+    const result = await findDailyNfceFiles(drive, ROOT, date);
+
+    expect(result).toEqual([]);
+  });
+
   it("excludes files that only contain '.xml' as a substring, not as the actual extension", async () => {
     // Drive's `contains` operator is a substring match — a name like "notes.xml.bak"
     // would pass that query but isn't actually an XML file. The local endsWith(".xml")
@@ -131,7 +153,8 @@ describe("findDailyNfceFiles", () => {
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" }],
-      "day-18": [
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }],
+      vendas: [
         { id: "file-1", name: "36177-1-4645600.xml", type: "file" },
         { id: "backup", name: "notes.xml.bak", type: "file" },
       ],
@@ -142,7 +165,140 @@ describe("findDailyNfceFiles", () => {
     expect(result).toEqual([{ id: "file-1", name: "36177-1-4645600.xml" }]);
   });
 
-  it("returns an empty array when the day folder exists but has no .xml files", async () => {
+  it("returns an empty array when vendas/ exists but has no .xml files", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }],
+      vendas: [],
+    });
+
+    const result = await findDailyNfceFiles(drive, ROOT, date);
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe("findDailyReceiptFiles", () => {
+  it("finds the .xml files under chef-bot/<year>/<month>/<day>/recebimentos/", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "recebimentos", name: "recebimentos", type: "folder" }],
+      recebimentos: [{ id: "file-1", name: "35260761559589-nfe.xml", type: "file" }],
+    });
+
+    const result = await findDailyReceiptFiles(drive, ROOT, date);
+
+    expect(result).toEqual([{ id: "file-1", name: "35260761559589-nfe.xml" }]);
+  });
+
+  it("returns an empty array when the day folder has no recebimentos/ subfolder", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "vendas", name: "vendas", type: "folder" }], // vendas exists, recebimentos doesn't
+      vendas: [],
+    });
+
+    const result = await findDailyReceiptFiles(drive, ROOT, date);
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe("findDailyWasteFiles", () => {
+  it("classifies PDFs under desperdicios/ into complete/incomplete by filename", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
+      desperdicios: [
+        { id: "file-complete", name: "Desperdicio_Completo.pdf", type: "file" },
+        { id: "file-incomplete", name: "Desperdicio_Incompleto.pdf", type: "file" },
+      ],
+    });
+
+    const result = await findDailyWasteFiles(drive, ROOT, date);
+
+    expect(result.complete).toEqual([{ id: "file-complete", name: "Desperdicio_Completo.pdf" }]);
+    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "Desperdicio_Incompleto.pdf" }]);
+    expect(result.unrecognized).toEqual([]);
+  });
+
+  it("classifies 'Incompleto' correctly even though 'completo' is a substring of it", async () => {
+    // The classic substring trap: "Incompleto".toLowerCase().includes("completo") is
+    // true, so a naive "completo" check (without checking "incompleto" first) would
+    // misfile every Incompleto report as Completo.
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
+      desperdicios: [{ id: "file-incomplete", name: "relatorio_incompleto.pdf", type: "file" }],
+    });
+
+    const result = await findDailyWasteFiles(drive, ROOT, date);
+
+    expect(result.incomplete).toEqual([{ id: "file-incomplete", name: "relatorio_incompleto.pdf" }]);
+    expect(result.complete).toEqual([]);
+  });
+
+  it("puts a file matching neither pattern into unrecognized", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
+      desperdicios: [{ id: "file-mystery", name: "relatorio_estranho.pdf", type: "file" }],
+    });
+
+    const result = await findDailyWasteFiles(drive, ROOT, date);
+
+    expect(result.unrecognized).toEqual([{ id: "file-mystery", name: "relatorio_estranho.pdf" }]);
+    expect(result.complete).toEqual([]);
+    expect(result.incomplete).toEqual([]);
+  });
+
+  it("does not deduplicate more than one file per category — leaves that to the caller", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
+      desperdicios: [
+        { id: "file-1", name: "Desperdicio_Completo.pdf", type: "file" },
+        { id: "file-2", name: "Desperdicio_Completo (1).pdf", type: "file" },
+      ],
+    });
+
+    const result = await findDailyWasteFiles(drive, ROOT, date);
+
+    expect(result.complete).toHaveLength(2);
+  });
+
+  it("excludes non-.pdf files even if they contain a recognized keyword", async () => {
+    const drive = fakeDriveApi({
+      [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
+      "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
+      "month-07": [{ id: "day-18", name: "18", type: "folder" }],
+      "day-18": [{ id: "desperdicios", name: "desperdicios", type: "folder" }],
+      desperdicios: [
+        { id: "file-1", name: "Desperdicio_Completo.pdf", type: "file" },
+        { id: "backup", name: "Desperdicio_Completo.pdf.bak", type: "file" },
+      ],
+    });
+
+    const result = await findDailyWasteFiles(drive, ROOT, date);
+
+    expect(result.complete).toEqual([{ id: "file-1", name: "Desperdicio_Completo.pdf" }]);
+  });
+
+  it("returns all-empty when the day folder has no desperdicios/ subfolder", async () => {
     const drive = fakeDriveApi({
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" }],
@@ -150,8 +306,8 @@ describe("findDailyNfceFiles", () => {
       "day-18": [],
     });
 
-    const result = await findDailyNfceFiles(drive, ROOT, date);
+    const result = await findDailyWasteFiles(drive, ROOT, date);
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ complete: [], incomplete: [], unrecognized: [] });
   });
 });

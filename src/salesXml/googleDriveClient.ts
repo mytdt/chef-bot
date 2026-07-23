@@ -1,7 +1,7 @@
 import type { Readable } from "node:stream";
 import { google, type drive_v3 } from "googleapis";
 import type { DriveFilesApi } from "src/salesXml/driveFileFinder.js";
-import type { DriveFileContentApi } from "src/salesXml/driveFileContent.js";
+import type { DriveFileContentApi, DriveFileBinaryContentApi } from "src/salesXml/driveFileContent.js";
 
 /**
  * GOOGLE_SERVICE_ACCOUNT_KEY (DECISIONS.md, 21/07) can be the raw service account JSON
@@ -23,29 +23,44 @@ export function createDriveClient(serviceAccountKeyRaw: string): drive_v3.Drive 
   return google.drive({ version: "v3", auth });
 }
 
+async function collectStreamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+  }
+  return Buffer.concat(chunks);
+}
+
 /**
  * B3 bot integration: bridges the real googleapis client to the narrow DriveFilesApi +
- * DriveFileContentApi interfaces salesXml/*.ts is written against. Isolated here
- * (rather than in index.ts) because this is the one module allowed to know about real
- * googleapis types.
+ * DriveFileContentApi + DriveFileBinaryContentApi interfaces salesXml/*.ts and
+ * wastePdf/*.ts are written against. Isolated here (rather than in index.ts) because
+ * this is the one module allowed to know about real googleapis types.
  *
  * `files.get({ alt: "media" })` only has a typed overload for `responseType: "stream"`
  * (googleapis has no "text" option, despite what a previous version of this codebase's
- * DriveFileContentApi implied) — this collects that stream into a string so the rest of
- * the B module can keep working with plain strings, same as its unit-test fakes do.
+ * DriveFileContentApi implied) — every download goes through the same stream-collecting
+ * helper, then each of the two API shapes decides what to do with the resulting Buffer:
+ * `get()` decodes it as UTF-8 text (correct for XML), `getBinary()` returns it as-is
+ * (required for PDFs — UTF-8-decoding binary content would corrupt it).
  */
-export function createDriveFilesAndContentApi(serviceAccountKeyRaw: string): DriveFilesApi & DriveFileContentApi {
+export function createDriveFilesAndContentApi(
+  serviceAccountKeyRaw: string,
+): DriveFilesApi & DriveFileContentApi & DriveFileBinaryContentApi {
   const drive = createDriveClient(serviceAccountKeyRaw);
+
+  async function downloadRaw(fileId: string): Promise<Buffer> {
+    const response = await drive.files.get({ fileId, alt: "media" }, { responseType: "stream" });
+    const stream = response.data as unknown as Readable;
+    return collectStreamToBuffer(stream);
+  }
+
   return {
     list: (params) => drive.files.list(params),
     async get({ fileId }) {
-      const response = await drive.files.get({ fileId, alt: "media" }, { responseType: "stream" });
-      const stream = response.data as unknown as Readable;
-      const chunks: Buffer[] = [];
-      for await (const chunk of stream) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-      }
-      return { data: Buffer.concat(chunks).toString("utf-8") };
+      const buffer = await downloadRaw(fileId);
+      return { data: buffer.toString("utf-8") };
     },
+    getBinary: (fileId) => downloadRaw(fileId),
   };
 }

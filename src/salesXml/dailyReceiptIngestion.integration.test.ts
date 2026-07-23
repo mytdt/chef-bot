@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { ingestDailySales } from "src/salesXml/dailySalesIngestion.js";
+import { ingestDailyReceipts } from "src/salesXml/dailyReceiptIngestion.js";
 import type { DriveFilesApi } from "src/salesXml/driveFileFinder.js";
 import type { DriveFileContentApi } from "src/salesXml/driveFileContent.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
@@ -24,8 +24,6 @@ interface FakeNode {
   type: "folder" | "file";
 }
 
-// Same shape of fake used in driveFileFinder.test.ts, extended with `get` for content
-// (no real Drive credential needed — see B2's TRILHA-ENTREGAVEIS.md note).
 function fakeDrive(tree: Record<string, FakeNode[]>, contents: Record<string, string>): DriveFilesApi & DriveFileContentApi {
   return {
     async list({ q }) {
@@ -51,28 +49,31 @@ function fakeDrive(tree: Record<string, FakeNode[]>, contents: Record<string, st
   };
 }
 
-function nfceXml(opts: { natOp?: string; items: { cProd: string | number; qCom: string | number }[] }): string {
-  const natOp = opts.natOp ?? "venda";
+function nfe55Xml(opts: { mod?: string; items: { cProd: string; qCom: string }[] }): string {
+  const mod = opts.mod ?? "55";
   const detBlocks = opts.items
-    .map((item, index) => `<det nItem="${index + 1}"><prod><cProd>${item.cProd}</cProd><qCom>${item.qCom}</qCom></prod></det>`)
+    .map(
+      (item, index) =>
+        `<det nItem="${index + 1}"><prod><cProd>${item.cProd}</cProd><xProd>Test product</xProd><qCom>${item.qCom}</qCom><uCom>CX</uCom></prod></det>`,
+    )
     .join("");
-  return `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe versao="4.00" Id="NFe0000000000"><ide><natOp>${natOp}</natOp><dhEmi>2026-07-18T18:16:38-03:00</dhEmi></ide>${detBlocks}</infNFe></NFe></nfeProc>`;
+  return `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe versao="4.00" Id="NFe0000000000"><ide><mod>${mod}</mod><natOp>VENDA DE PRODUCAO DO ESTABELECIMENTO</natOp><dhEmi>2026-07-15T14:02:00-03:00</dhEmi></ide>${detBlocks}</infNFe></NFe></nfeProc>`;
 }
 
 const treeWithOneFile = {
   [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" as const }],
   "year-2026": [{ id: "month-07", name: "07", type: "folder" as const }],
   "month-07": [{ id: "day-18", name: "18", type: "folder" as const }],
-  "day-18": [{ id: "vendas", name: "vendas", type: "folder" as const }],
-  vendas: [{ id: "file-1", name: "36177-1-4645600.xml", type: "file" as const }],
+  "day-18": [{ id: "recebimentos", name: "recebimentos", type: "folder" as const }],
+  recebimentos: [{ id: "file-1", name: "35260761559589-nfe.xml", type: "file" as const }],
 };
 
-describe("ingestDailySales", () => {
+describe("ingestDailyReceipts", () => {
   it("returns an empty result (not an error) when the day folder doesn't exist yet", async () => {
     const testStore = await createTestStore(db);
     const drive = fakeDrive({ [ROOT]: [] }, {});
 
-    const result = await ingestDailySales(db, drive, ROOT, testStore.id, date);
+    const result = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
 
     expect(result.totalFilesFound).toBe(0);
     expect(result.processed).toEqual([]);
@@ -81,25 +82,25 @@ describe("ingestDailySales", () => {
 
   it("reports malformed XML as a per-file error without blocking the other files in the batch", async () => {
     const testStore = await createTestStore(db);
-    await createTestSupply(db, testStore.id, { code: "F", name: "Burger de 90g" });
+    await createTestSupply(db, testStore.id, { code: "G", name: "Burger de 160g", unitsPerBox: 36 });
 
     const tree = {
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" as const }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" as const }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" as const }],
-      "day-18": [{ id: "vendas", name: "vendas", type: "folder" as const }],
-      vendas: [
+      "day-18": [{ id: "recebimentos", name: "recebimentos", type: "folder" as const }],
+      recebimentos: [
         { id: "good-file", name: "good.xml", type: "file" as const },
         { id: "bad-file", name: "bad.xml", type: "file" as const },
       ],
     };
     const contents = {
-      "good-file": nfceXml({ items: [{ cProd: 1001, qCom: "1.0000" }] }),
+      "good-file": nfe55Xml({ items: [{ cProd: "052700.0160006", qCom: "26.0000" }] }),
       "bad-file": "<not-even-close-to-xml",
     };
     const drive = fakeDrive(tree, contents);
 
-    const result = await ingestDailySales(db, drive, ROOT, testStore.id, date);
+    const result = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
 
     expect(result.totalFilesFound).toBe(2);
     expect(result.processed).toHaveLength(1);
@@ -110,13 +111,13 @@ describe("ingestDailySales", () => {
 
   it("does not duplicate InventoryMovement when run twice for the same day (idempotency)", async () => {
     const testStore = await createTestStore(db);
-    const supplyF = await createTestSupply(db, testStore.id, { code: "F", name: "Burger de 90g" });
+    const supplyG = await createTestSupply(db, testStore.id, { code: "G", name: "Burger de 160g", unitsPerBox: 36 });
 
-    const contents = { "file-1": nfceXml({ items: [{ cProd: 1001, qCom: "1.0000" }] }) };
+    const contents = { "file-1": nfe55Xml({ items: [{ cProd: "052700.0160006", qCom: "26.0000" }] }) };
     const drive = fakeDrive(treeWithOneFile, contents);
 
-    const first = await ingestDailySales(db, drive, ROOT, testStore.id, date);
-    const second = await ingestDailySales(db, drive, ROOT, testStore.id, date);
+    const first = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
+    const second = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
 
     expect(first.processed).toHaveLength(1);
     expect(first.skippedAlreadyProcessed).toHaveLength(0);
@@ -125,38 +126,38 @@ describe("ingestDailySales", () => {
     expect(second.skippedAlreadyProcessed).toHaveLength(1);
     expect(second.skippedAlreadyProcessed[0]?.fileId).toBe("file-1");
 
-    const totals = await inventoryMovementRepo.sumSince(db, supplyF.id, new Date(0));
-    expect(totals.sales).toBe(1); // not 2 — the second run didn't reprocess the file
+    const totals = await inventoryMovementRepo.sumSince(db, supplyG.id, new Date(0));
+    expect(totals.receipts).toBe(26 * 36); // not doubled — the second run didn't reprocess the file
   });
 
   it("retries a file that previously errored, without re-running files that already succeeded", async () => {
     const testStore = await createTestStore(db);
-    await createTestSupply(db, testStore.id, { code: "F", name: "Burger de 90g" });
+    await createTestSupply(db, testStore.id, { code: "G", name: "Burger de 160g", unitsPerBox: 36 });
 
     const tree = {
       [ROOT]: [{ id: "year-2026", name: "2026", type: "folder" as const }],
       "year-2026": [{ id: "month-07", name: "07", type: "folder" as const }],
       "month-07": [{ id: "day-18", name: "18", type: "folder" as const }],
-      "day-18": [{ id: "vendas", name: "vendas", type: "folder" as const }],
-      vendas: [
+      "day-18": [{ id: "recebimentos", name: "recebimentos", type: "folder" as const }],
+      recebimentos: [
         { id: "good-file", name: "good.xml", type: "file" as const },
         { id: "bad-file", name: "bad.xml", type: "file" as const },
       ],
     };
     const contents: Record<string, string> = {
-      "good-file": nfceXml({ items: [{ cProd: 1001, qCom: "1.0000" }] }),
+      "good-file": nfe55Xml({ items: [{ cProd: "052700.0160006", qCom: "26.0000" }] }),
       "bad-file": "<not-even-close-to-xml",
     };
     const drive = fakeDrive(tree, contents);
 
-    const first = await ingestDailySales(db, drive, ROOT, testStore.id, date);
+    const first = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
     expect(first.processed).toHaveLength(1);
     expect(first.errors).toHaveLength(1);
 
     // "Fix" the bad file, as if someone corrected it in Drive between runs.
-    contents["bad-file"] = nfceXml({ items: [{ cProd: 1001, qCom: "2.0000" }] });
+    contents["bad-file"] = nfe55Xml({ items: [{ cProd: "052700.0090006", qCom: "7.0000" }] });
 
-    const second = await ingestDailySales(db, drive, ROOT, testStore.id, date);
+    const second = await ingestDailyReceipts(db, drive, ROOT, testStore.id, date);
 
     expect(second.skippedAlreadyProcessed).toHaveLength(1);
     expect(second.skippedAlreadyProcessed[0]?.fileId).toBe("good-file");

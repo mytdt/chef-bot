@@ -37,11 +37,13 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
       return;
     }
 
-    // B3 bot integration: a count can only be compared once that day's XML has been
-    // ingested — otherwise "expected" would be missing that day's sales deductions.
-    // Park it instead of comparing against an incomplete picture; an admin running
-    // /ingest-xml later resumes it automatically (ingestionResume.ts).
-    const ingested = await dailyIngestionRunRepo.hasRunForDate(db, activeStore.id, pendingCount.parse.date);
+    // B3 bot integration, extended 2026-07-22: a count can only be compared once ALL
+    // THREE ingestion types (venda, recebimento, desperdício) have run for that day —
+    // otherwise "expected" would be missing part of the picture (e.g. receipts not yet
+    // deducted). Park it instead of comparing against an incomplete picture; an admin
+    // running /ingest-xml later resumes it automatically (ingestionResume.ts), since
+    // that command always runs all three types together for the date it's given.
+    const ingested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, pendingCount.parse.date);
     if (!ingested) {
       await awaitingIngestionCountRepo.insert(db, {
         storeId: activeStore.id,
@@ -54,7 +56,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
         llmUsed: pendingCount.llmUsed,
       });
       await ctx.reply(
-        `⏳ Ainda não recebi o XML de vendas de ${pendingCount.parse.date} — vou processar sua contagem automaticamente assim que um admin rodar a ingestão. Não precisa reenviar.`,
+        `⏳ Ainda não recebi todos os dados de ${pendingCount.parse.date} (venda, recebimento e desperdício) — vou processar sua contagem automaticamente assim que um admin rodar a ingestão. Não precisa reenviar.`,
       );
       return;
     }

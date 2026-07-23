@@ -13,32 +13,67 @@ afterAll(async () => {
 });
 
 describe("dailyIngestionRunRepo", () => {
-  it("reports no run for a date that was never recorded", async () => {
+  it("reports no run for a date/type that was never recorded", async () => {
     const testStore = await createTestStore(db);
 
-    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22")).toBe(false);
+    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22", "sale")).toBe(false);
   });
 
   it("reports a run once recorded", async () => {
     const testStore = await createTestStore(db);
 
-    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22");
+    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale");
 
-    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22")).toBe(true);
+    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22", "sale")).toBe(true);
   });
 
   it("does not confuse a run recorded for one date with another date", async () => {
     const testStore = await createTestStore(db);
 
-    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-21");
+    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-21", "sale");
 
-    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22")).toBe(false);
+    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22", "sale")).toBe(false);
   });
 
-  it("is idempotent — recording the same (store, date) twice does not throw", async () => {
+  it("does not confuse a run recorded for one type with another type, same date", async () => {
     const testStore = await createTestStore(db);
 
-    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22");
-    await expect(dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22")).resolves.not.toThrow();
+    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale");
+
+    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22", "receipt")).toBe(false);
+    expect(await dailyIngestionRunRepo.hasRunForDate(db, testStore.id, "2026-07-22", "waste")).toBe(false);
+  });
+
+  it("is idempotent — recording the same (store, date, type) twice does not throw", async () => {
+    const testStore = await createTestStore(db);
+
+    await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale");
+    await expect(dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale")).resolves.not.toThrow();
+  });
+
+  describe("hasAllTypesRunForDate", () => {
+    it("is false when no type has run yet", async () => {
+      const testStore = await createTestStore(db);
+
+      expect(await dailyIngestionRunRepo.hasAllTypesRunForDate(db, testStore.id, "2026-07-22")).toBe(false);
+    });
+
+    it("is false when only some types have run", async () => {
+      const testStore = await createTestStore(db);
+      await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale");
+      await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "receipt");
+      // "waste" not recorded.
+
+      expect(await dailyIngestionRunRepo.hasAllTypesRunForDate(db, testStore.id, "2026-07-22")).toBe(false);
+    });
+
+    it("is true once sale, receipt, and waste have all run for the date", async () => {
+      const testStore = await createTestStore(db);
+      await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "sale");
+      await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "receipt");
+      await dailyIngestionRunRepo.recordRun(db, testStore.id, "2026-07-22", "waste");
+
+      expect(await dailyIngestionRunRepo.hasAllTypesRunForDate(db, testStore.id, "2026-07-22")).toBe(true);
+    });
   });
 });
