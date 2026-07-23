@@ -7,10 +7,22 @@ export interface DriveFileRef {
  * Narrow slice of the googleapis Drive client this module actually calls (just
  * `files.list`) — lets tests inject a fake without depending on googleapis' full,
  * network-backed client shape. `drive_v3.Drive["files"]` satisfies this structurally.
+ *
+ * `pageToken` / `nextPageToken` are required for listing folder contents that exceed
+ * Drive's default page size (100). Folder-by-name lookups (findChildFolderId) don't
+ * paginate: they filter by exact name under one parent and expect 0–1 hits.
  */
 export interface DriveFilesApi {
-  list(params: { q: string; fields?: string }): Promise<{
-    data: { files?: { id?: string | null; name?: string | null }[] };
+  list(params: {
+    q: string;
+    fields?: string;
+    pageToken?: string;
+    pageSize?: number;
+  }): Promise<{
+    data: {
+      files?: { id?: string | null; name?: string | null }[];
+      nextPageToken?: string | null;
+    };
   }>;
 }
 
@@ -25,6 +37,9 @@ function escapeForDriveQuery(value: string): string {
 }
 
 async function findChildFolderId(files: DriveFilesApi, parentFolderId: string, name: string): Promise<string | null> {
+  // Exact name + folder mimeType under one parent → expected 0 or 1 result. No pagination:
+  // even at Drive's 100-item page default we only ever read files[0], and duplicate
+  // folder names under the same parent aren't part of our convention.
   const response = await files.list({
     q: `'${parentFolderId}' in parents and name = '${escapeForDriveQuery(name)}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
     fields: "files(id, name)",
@@ -97,16 +112,33 @@ async function findDayFolderId(files: DriveFilesApi, rootFolderId: string, date:
  * insensitive). Drive's `contains` operator is a substring match, not a suffix match —
  * filtering by actual suffix locally (not just trusting the query) catches a name like
  * "notes.xml.bak" that would otherwise pass a `contains '.xml'` query.
+ *
+ * Paginates until `nextPageToken` is absent — Drive's default page size is 100, and a
+ * busy sales day can exceed that (confirmed in production 2026-07-22: 144 NFC-e, first
+ * page reported as "encontrados: 100"). Without this loop, vendas/recebimentos/
+ * desperdicios all silently truncate.
  */
 async function listFilesInFolder(files: DriveFilesApi, folderId: string, extension: string): Promise<DriveFileRef[]> {
-  const response = await files.list({
-    q: `'${folderId}' in parents and mimeType != '${FOLDER_MIME_TYPE}' and trashed = false and name contains '${extension}'`,
-    fields: "files(id, name)",
-  });
-  return (response.data.files ?? [])
-    .filter((file): file is { id: string; name: string } => Boolean(file.id && file.name))
-    .filter((file) => file.name.toLowerCase().endsWith(extension))
-    .map((file) => ({ id: file.id, name: file.name }));
+  const accumulated: { id: string; name: string }[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const response = await files.list({
+      q: `'${folderId}' in parents and mimeType != '${FOLDER_MIME_TYPE}' and trashed = false and name contains '${extension}'`,
+      fields: "nextPageToken, files(id, name)",
+      pageToken,
+    });
+
+    for (const file of response.data.files ?? []) {
+      if (file.id && file.name) {
+        accumulated.push({ id: file.id, name: file.name });
+      }
+    }
+
+    pageToken = response.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return accumulated.filter((file) => file.name.toLowerCase().endsWith(extension));
 }
 
 /**

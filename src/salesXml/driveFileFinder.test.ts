@@ -40,6 +40,7 @@ function fakeDriveApi(tree: Record<string, FakeNode[]>): DriveFilesApi {
         filtered = filtered.filter((node) => node.name.includes(nameContains));
       }
 
+      // Single page — enough for most tests. Pagination is covered separately below.
       return { data: { files: filtered.map((node) => ({ id: node.id, name: node.name })) } };
     },
   };
@@ -177,6 +178,54 @@ describe("findDailyNfceFiles", () => {
     const result = await findDailyNfceFiles(drive, ROOT, date);
 
     expect(result).toEqual([]);
+  });
+
+  it("follows nextPageToken across pages (Drive default page size is 100)", async () => {
+    // Production bug 2026-07-22: a day with 144 NFC-e was reported as "encontrados: 100"
+    // because listFilesInFolder only called files.list() once. This fake returns 100
+    // files on page 1 + 44 on page 2, matching Drive's default page size.
+    const page1Files = Array.from({ length: 100 }, (_, i) => ({
+      id: `file-${i + 1}`,
+      name: `sale-${String(i + 1).padStart(3, "0")}.xml`,
+    }));
+    const page2Files = Array.from({ length: 44 }, (_, i) => ({
+      id: `file-${i + 101}`,
+      name: `sale-${String(i + 101).padStart(3, "0")}.xml`,
+    }));
+
+    const drive: DriveFilesApi = {
+      async list({ q, pageToken }) {
+        if (q.includes(`mimeType = 'application/vnd.google-apps.folder'`)) {
+          const parentId = q.match(/'([^']+)' in parents/)?.[1] ?? "";
+          const nameEquals = q.match(/name = '([^']*)'/)?.[1];
+          const folders: Record<string, { id: string; name: string }[]> = {
+            [ROOT]: [{ id: "year-2026", name: "2026" }],
+            "year-2026": [{ id: "month-07", name: "07" }],
+            "month-07": [{ id: "day-18", name: "18" }],
+            "day-18": [{ id: "vendas", name: "vendas" }],
+          };
+          const matches = (folders[parentId] ?? []).filter((f) => f.name === nameEquals);
+          return { data: { files: matches } };
+        }
+
+        // File listing under vendas — paginate.
+        if (!pageToken) {
+          return { data: { files: page1Files, nextPageToken: "page-2" } };
+        }
+        if (pageToken === "page-2") {
+          return { data: { files: page2Files } };
+        }
+        throw new Error(`Unexpected pageToken: ${pageToken}`);
+      },
+    };
+
+    const result = await findDailyNfceFiles(drive, ROOT, date);
+
+    expect(result).toHaveLength(144);
+    expect(result[0]).toEqual({ id: "file-1", name: "sale-001.xml" });
+    expect(result[99]).toEqual({ id: "file-100", name: "sale-100.xml" });
+    expect(result[100]).toEqual({ id: "file-101", name: "sale-101.xml" });
+    expect(result[143]).toEqual({ id: "file-144", name: "sale-144.xml" });
   });
 });
 
