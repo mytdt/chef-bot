@@ -85,6 +85,24 @@ Reason 1,00 R$ 11,00 R$ 11,00
     expect(result.skippedSupplyCodesNotFound).toEqual(["G"]);
   });
 
+  it("skips (not throws) a fractional quantity for a Burger-category Supply", async () => {
+    const testStore = await createTestStore(db);
+    const testSupply = await createTestSupply(db, testStore.id, { code: "W", name: "Burger de Wagyu de 200g" }); // category: "burger" (default)
+
+    const text = reportWithRows(`1031 Some Menu Item 01/01/2026 Noite 999
+Some
+Reason 1,50 R$ 22,50 R$ 22,50
+01/01/2026
+20:00:00 999`);
+
+    const result = await processWasteCompleteReport(db, testStore.id, text);
+
+    expect(result.inserted).toEqual([]);
+    expect(result.skippedInvalidQuantity).toEqual([{ supplyCode: "W", quantity: 1.5 }]);
+    const totals = await inventoryMovementRepo.sumSince(db, testSupply.id, new Date(0));
+    expect(totals.waste).toBe(0);
+  });
+
   it("returns hasData: false and inserts nothing for an empty day", async () => {
     const testStore = await createTestStore(db);
     const text = `Página 1 de 2\nLista de Desperdício Completo\nFILTROS - DETALHADO\nVALOR TOTAL\nR$ 0,00\nQUANTIDADE\n0\nNenhum dado encontrado\n`;

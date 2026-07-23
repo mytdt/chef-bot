@@ -42,7 +42,11 @@ function reportWithRows(rows: string): string {
 describe("processWasteIncompleteReport", () => {
   it("records a waste movement for a mapped, existing Supply (SKU 508 -> QUEIJO_GOUDA)", async () => {
     const testStore = await createTestStore(db);
-    const testSupply = await createTestSupply(db, testStore.id, { code: "QUEIJO_GOUDA", name: "Queijo Gouda" });
+    // category: "cheese" (not the createTestSupply default "burger") — Queijo Gouda is
+    // realistically fractional-quantity (kg), and quantityRules.ts only requires whole
+    // numbers for "burger". Using the default here would make this test's own fixture
+    // trip the new isValidQuantity check below, for the wrong reason.
+    const testSupply = await createTestSupply(db, testStore.id, { code: "QUEIJO_GOUDA", name: "Queijo Gouda", category: "cheese" });
 
     const text = reportWithRows(`508
 Queijo
@@ -87,6 +91,28 @@ Operacional 0,02 R$ 53,41 R$ 1,12`);
 
     expect(result.inserted).toEqual([]);
     expect(result.skippedSupplyCodesNotFound).toEqual(["QUEIJO_GOUDA"]);
+  });
+
+  it("skips (not throws) a fractional quantity for a Burger-category Supply", async () => {
+    const testStore = await createTestStore(db);
+    // Mapped via SKU 508 (the only entry in wasteSkuMap.ts today), but overridden to
+    // category: "burger" here specifically to exercise the integer-quantity rule —
+    // the report's real row data (0,02) is fractional, which is realistic for Queijo
+    // Gouda (cheese) but must be rejected for a Burger-category Supply.
+    const testSupply = await createTestSupply(db, testStore.id, { code: "QUEIJO_GOUDA", name: "Test Burger", category: "burger" });
+
+    const text = reportWithRows(`508
+Queijo
+Gouda 01/01/2026 Manhã 233
+Perda
+Operacional 0,02 R$ 53,41 R$ 1,12`);
+
+    const result = await processWasteIncompleteReport(db, testStore.id, text);
+
+    expect(result.inserted).toEqual([]);
+    expect(result.skippedInvalidQuantity).toEqual([{ supplyCode: "QUEIJO_GOUDA", quantity: 0.02 }]);
+    const totals = await inventoryMovementRepo.sumSince(db, testSupply.id, new Date(0));
+    expect(totals.waste).toBe(0);
   });
 
   it("returns hasData: false and inserts nothing for an empty day", async () => {

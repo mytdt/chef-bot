@@ -3,12 +3,14 @@ import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
 import { parseNfceXml } from "src/salesXml/nfceParser.js";
 import { lookupProductMapping } from "src/salesXml/productMap.js";
+import { isValidQuantity } from "src/domain/quantityRules.js";
 
 export interface ProcessNfceSaleResult {
   skippedNonSale: boolean;
   inserted: { supplyCode: string; quantity: number }[];
   skippedUnmappedProductCodes: string[];
   skippedSupplyCodesNotFound: string[];
+  skippedInvalidQuantity: { supplyCode: string; quantity: number }[];
 }
 
 /**
@@ -23,6 +25,13 @@ export interface ProcessNfceSaleResult {
  * unrecognized line item on a 4-item receipt shouldn't block the other 3 from being
  * recorded. B2/B3 (not in scope here) decide what to do with a non-empty skipped-items
  * list (e.g. alert the group).
+ *
+ * Same posture applies to quantity: a computed quantity that violates
+ * domain/quantityRules.ts (e.g. a fractional Burger count from an odd multiplier) is
+ * skipped and reported, not inserted — this mirrors the check bot/handlers/movement.ts
+ * and domain/count.ts already do for manually-entered quantities; auto-ingested
+ * quantities need the same guarantee, since InventoryMovement doesn't enforce it at
+ * the DB level (see quantityRules.ts's comment on why the column stays doublePrecision).
  */
 export async function processNfceSale(db: Db, storeId: string, xmlContent: string): Promise<ProcessNfceSaleResult> {
   const parsed = parseNfceXml(xmlContent);
@@ -33,6 +42,7 @@ export async function processNfceSale(db: Db, storeId: string, xmlContent: strin
     inserted: [],
     skippedUnmappedProductCodes: [],
     skippedSupplyCodesNotFound: [],
+    skippedInvalidQuantity: [],
   };
 
   if (infNFe.ide.natOp !== "venda") {
@@ -54,6 +64,11 @@ export async function processNfceSale(db: Db, storeId: string, xmlContent: strin
     }
 
     const quantity = item.prod.qCom * mapping.multiplier;
+    if (!isValidQuantity(supplyFound.category, quantity)) {
+      result.skippedInvalidQuantity.push({ supplyCode: mapping.supplyCode, quantity });
+      continue;
+    }
+
     await inventoryMovementRepo.insert(db, {
       supplyId: supplyFound.id,
       type: "sale",

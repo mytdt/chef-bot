@@ -3,6 +3,7 @@ import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
 import * as inventoryMovementRepo from "src/persistence/repositories/inventoryMovementRepo.js";
 import { parseNfe55Xml } from "src/salesXml/nfe55Parser.js";
 import { SUPPLIER_PRODUCT_MAP } from "src/salesXml/supplierProductMap.js";
+import { isValidQuantity } from "src/domain/quantityRules.js";
 
 export interface ProcessNfeReceiptResult {
   skippedWrongModel: boolean;
@@ -10,6 +11,7 @@ export interface ProcessNfeReceiptResult {
   skippedUnmappedProductCodes: string[];
   skippedSupplyCodesNotFound: string[];
   skippedMissingUnitsPerBox: string[];
+  skippedInvalidQuantity: { supplyCode: string; quantity: number }[];
 }
 
 /**
@@ -23,8 +25,10 @@ export interface ProcessNfeReceiptResult {
  * description string).
  *
  * Same defensive posture as B1/salesAdapter.ts: unmapped product codes, Supply not
- * found, and missing unitsPerBox are all skipped and reported rather than thrown — one
- * bad line item on a multi-item receipt shouldn't block the others.
+ * found, missing unitsPerBox, and a computed quantity that violates
+ * domain/quantityRules.ts (e.g. a fractional Burger count) are all skipped and
+ * reported rather than thrown — one bad line item on a multi-item receipt shouldn't
+ * block the others.
  */
 export async function processNfeReceipt(db: Db, storeId: string, xmlContent: string): Promise<ProcessNfeReceiptResult> {
   const parsed = parseNfe55Xml(xmlContent);
@@ -36,6 +40,7 @@ export async function processNfeReceipt(db: Db, storeId: string, xmlContent: str
     skippedUnmappedProductCodes: [],
     skippedSupplyCodesNotFound: [],
     skippedMissingUnitsPerBox: [],
+    skippedInvalidQuantity: [],
   };
 
   if (infNFe.ide.mod !== "55") {
@@ -62,6 +67,11 @@ export async function processNfeReceipt(db: Db, storeId: string, xmlContent: str
     }
 
     const quantity = item.prod.qCom * supplyFound.unitsPerBox;
+    if (!isValidQuantity(supplyFound.category, quantity)) {
+      result.skippedInvalidQuantity.push({ supplyCode, quantity });
+      continue;
+    }
+
     await inventoryMovementRepo.insert(db, {
       supplyId: supplyFound.id,
       type: "receipt",
