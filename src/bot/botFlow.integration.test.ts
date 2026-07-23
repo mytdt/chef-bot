@@ -23,6 +23,15 @@ const COUNT_ROUTINE_NAME = "Contagem de Carne";
 // normal (already-ingested) path record a dailyIngestionRun for this date up front.
 const TEST_DATE = "2026-07-22";
 
+// 2026-07-22: the "estado de espera" now requires all three ingestion types (not just
+// sale) recorded for a date before a count can be compared — see
+// confirmation.ts/dailyIngestionRunRepo.hasAllTypesRunForDate.
+async function recordAllTypesIngested(storeId: string): Promise<void> {
+  await dailyIngestionRunRepo.recordRun(db, storeId, TEST_DATE, "sale");
+  await dailyIngestionRunRepo.recordRun(db, storeId, TEST_DATE, "receipt");
+  await dailyIngestionRunRepo.recordRun(db, storeId, TEST_DATE, "waste");
+}
+
 beforeEach(async () => {
   await resetDatabase(db);
 });
@@ -113,7 +122,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
     const testSupply = await createTestSupply(db, testStore.id, { code: "TestBurger", name: "TestBurger" });
     await inventoryMovementRepo.insert(db, { supplyId: testSupply.id, type: "receipt", quantity: 100 });
-    await dailyIngestionRunRepo.recordRun(db, testStore.id, TEST_DATE);
+    await recordAllTypesIngested(testStore.id);
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
@@ -136,7 +145,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
     await createTestSupply(db, testStore.id, { code: "TestBurger2", name: "TestBurger2" });
     // No movements recorded -> expected value is 0; reporting 50 is a mismatch.
-    await dailyIngestionRunRepo.recordRun(db, testStore.id, TEST_DATE);
+    await recordAllTypesIngested(testStore.id);
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
@@ -160,7 +169,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     expect(confirmationReply?.payload.text).toContain("Alerta enviado ao grupo");
   });
 
-  it("parks the count as awaiting ingestion (does not compare/alert) when the date's XML hasn't been ingested yet", async () => {
+  it("parks the count as awaiting ingestion (does not compare/alert) when none of the date's ingestion types have run yet", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
     await createTestSupply(db, testStore.id, { code: "TestBurger4", name: "TestBurger4" });
@@ -175,7 +184,7 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     await bot.handleUpdate(callbackQueryUpdate(callbackDataFromLastReply(calls), 555));
 
     const finalReply = calls.filter((c) => c.method === "sendMessage").at(-1);
-    expect(finalReply?.payload.text).toContain("Ainda não recebi o XML");
+    expect(finalReply?.payload.text).toContain("Ainda não recebi todos os dados");
     expect(finalReply?.payload.text).not.toContain("Tudo certo");
     expect(finalReply?.payload.text).not.toContain("Alerta");
 
@@ -184,5 +193,28 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     expect(waiting[0]?.items).toEqual([{ supply: "TestBurger4", quantity: 10, actualQuantity: null }]);
     expect(waiting[0]?.chatId).toBe("555");
     expect(waiting[0]?.llmUsed).toBe("claude");
+  });
+
+  it("parks the count as awaiting ingestion when only some of the date's ingestion types have run (not just sale)", async () => {
+    const testStore = await createTestStore(db, { telegramGroupId: "555" });
+    await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
+    await createTestSupply(db, testStore.id, { code: "TestBurger5", name: "TestBurger5" });
+    // Sale ran, but receipt/waste didn't — this used to be enough to release the count
+    // (the gate only checked "any ingestion ran"); now it must still park.
+    await dailyIngestionRunRepo.recordRun(db, testStore.id, TEST_DATE, "sale");
+
+    const bot = createBot("fake-token", "555");
+    const calls = stubTelegramApi();
+    registerCountHandler(bot, { llmParser: fakeLlmParser([{ supply: "TestBurger5", quantity: 10 }]) });
+    registerConfirmationHandler(bot, db);
+
+    await bot.handleUpdate(textMessageUpdate("10 TestBurger5", 555));
+    await bot.handleUpdate(callbackQueryUpdate(callbackDataFromLastReply(calls), 555));
+
+    const finalReply = calls.filter((c) => c.method === "sendMessage").at(-1);
+    expect(finalReply?.payload.text).toContain("Ainda não recebi todos os dados");
+
+    const waiting = await awaitingIngestionCountRepo.listByStoreAndDate(db, testStore.id, TEST_DATE);
+    expect(waiting).toHaveLength(1);
   });
 });

@@ -142,11 +142,51 @@ export const processedSalesFile = pgTable(
   (table) => [unique().on(table.storeId, table.driveFileId)],
 );
 
+// B5: same identity-based idempotency as processedSalesFile, for receiving notes (NFe
+// modelo 55) instead of sales NFC-e — a separate table (not a shared one with a `type`
+// discriminator) mirrors the existing table 1:1, keeping each ingestion type's tracking
+// independent and trivially easy to reason about.
+export const processedReceiptFile = pgTable(
+  "processed_receipt_file",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storeId: uuid("store_id")
+      .notNull()
+      .references(() => store.id),
+    driveFileId: text("drive_file_id").notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.storeId, table.driveFileId)],
+);
+
+// B6: same idempotency pattern, for waste reports (both "Completo" and "Incompleto"
+// share this one table — they're different Drive files with different ids, so
+// per-file-id uniqueness already keeps them independent without needing a report-type
+// column here).
+export const processedWasteFile = pgTable(
+  "processed_waste_file",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    storeId: uuid("store_id")
+      .notNull()
+      .references(() => store.id),
+    driveFileId: text("drive_file_id").notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.storeId, table.driveFileId)],
+);
+
 // B3 bot integration: distinct from processedSalesFile (which tracks individual files
 // by id) — this tracks "was the daily ingestion command run at all for this date",
 // including a day where it ran and found zero files (store closed, no sales yet). That
 // distinction matters: a Count can only be compared once we know the day's ingestion
 // was actually attempted, not just inferred from an empty processedSalesFile result.
+//
+// `type` (2026-07-22 fix): originally untyped, implicitly "sales only" — a count could
+// be released for comparison as soon as *any* ingestion ran, even if receipts/waste for
+// that day hadn't been. Now one row per (store, date, type), and the "estado de espera"
+// (confirmation.ts) requires all three movementTypeEnum values before releasing a
+// count — see dailyIngestionRunRepo.hasAllTypesRunForDate.
 export const dailyIngestionRun = pgTable(
   "daily_ingestion_run",
   {
@@ -155,9 +195,10 @@ export const dailyIngestionRun = pgTable(
       .notNull()
       .references(() => store.id),
     date: date("date").notNull(),
+    type: movementTypeEnum("type").notNull(),
     ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique().on(table.storeId, table.date)],
+  (table) => [unique().on(table.storeId, table.date, table.type)],
 );
 
 // B3 bot integration: a confirmed count whose date's XML hasn't been ingested yet
