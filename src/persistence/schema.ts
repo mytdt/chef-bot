@@ -205,7 +205,7 @@ export const dailyIngestionRun = pgTable(
 // (dailyIngestionRun has no row for it) is parked here instead of becoming a Count
 // immediately — Count stays immutable (see comment on countRepo.insert), so a count
 // that isn't ready to be compared yet must not exist as a Count row at all. Resumed
-// automatically by ingestionResume.ts once /ingest-xml runs for that date.
+// automatically by ingestionResume.ts once /ingest_xml runs for that date.
 export const awaitingIngestionCount = pgTable("awaiting_ingestion_count", {
   id: uuid("id").primaryKey().defaultRandom(),
   storeId: uuid("store_id")
@@ -221,7 +221,7 @@ export const awaitingIngestionCount = pgTable("awaiting_ingestion_count", {
   // Mirrors bot/parse.schema.ts's CountItem shape — kept as an inline type instead of
   // importing it, so the persistence layer doesn't depend on the bot layer.
   items: jsonb("items").$type<{ supply: string; quantity: number; actualQuantity: number | null }[]>().notNull(),
-  // C5: preserved so resume after /ingest-xml still records which LLM produced the parse.
+  // C5: preserved so resume after /ingest_xml still records which LLM produced the parse.
   llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -19,7 +19,7 @@ export function createAuthorizationMiddleware(groupId: string): MiddlewareFn<Con
 /**
  * B3 bot integration: a narrower permission level within the already-authorized group
  * (D9) — everyone in the group can send counts, but only specific people can trigger
- * /ingest-xml. Unlike the silent drop above, this replies explicitly: the requester is
+ * /ingest_xml. Unlike the silent drop above, this replies explicitly: the requester is
  * already in an authorized chat, so acknowledging the command exists (just not for
  * them) doesn't leak anything a group member couldn't already see.
  */

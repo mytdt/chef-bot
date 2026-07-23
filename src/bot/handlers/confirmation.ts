@@ -41,7 +41,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
     // THREE ingestion types (venda, recebimento, desperdício) have run for that day —
     // otherwise "expected" would be missing part of the picture (e.g. receipts not yet
     // deducted). Park it instead of comparing against an incomplete picture; an admin
-    // running /ingest-xml later resumes it automatically (ingestionResume.ts), since
+    // running /ingest_xml later resumes it automatically (ingestionResume.ts), since
     // that command always runs all three types together for the date it's given.
     const ingested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, pendingCount.parse.date);
     if (!ingested) {

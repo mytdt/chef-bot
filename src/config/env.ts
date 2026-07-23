@@ -8,12 +8,12 @@ const envSchema = z.object({
   // it, the bot still works, just without a fallback if Claude is down.
   GEMINI_API_KEY: z.string().min(1).optional(),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  // Required as of B3 bot integration: /ingest-xml (handlers/ingestXml.ts) wires the
+  // Required as of B3 bot integration: /ingest_xml (handlers/ingestXml.ts) wires the
   // Google Drive client into the running bot, so these are load-bearing now — no
   // longer optional the way they were when B2 only had unit-tested, unwired code.
   GOOGLE_SERVICE_ACCOUNT_KEY: z.string().min(1, "GOOGLE_SERVICE_ACCOUNT_KEY is required"),
   GOOGLE_DRIVE_ROOT_FOLDER_ID: z.string().min(1, "GOOGLE_DRIVE_ROOT_FOLDER_ID is required"),
-  // B3 bot integration: comma-separated Telegram user ids allowed to run /ingest-xml.
+  // B3 bot integration: comma-separated Telegram user ids allowed to run /ingest_xml.
   // Optional — an empty list just means nobody can run the command yet, not a boot
   // failure.
   ADMIN_TELEGRAM_IDS: z

@@ -5,7 +5,7 @@ import { processConfirmedItems, formatCountBatchReply } from "src/domain/countBa
 
 /**
  * B3 bot integration: confirmed answer to the open UX question ("retomar sozinha
- * automaticamente") — once /ingest-xml finishes for a date, every count that was
+ * automaticamente") — once /ingest_xml finishes for a date, every count that was
  * parked waiting for that date's XML (handlers/confirmation.ts) is processed right
  * away, with no action needed from the collaborator who originally sent it.
  */

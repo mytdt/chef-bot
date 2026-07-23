@@ -57,8 +57,21 @@ function stubTelegramApi() {
   return calls;
 }
 
+// 2026-07-23 fix: this used to take the whole first whitespace-delimited token as the
+// entity length (`commandText.split(/\s+/)[0].length`) — which is NOT how Telegram's
+// real client computes a bot_command entity. Telegram only accepts Latin letters,
+// digits, and underscores in a command name
+// (https://core.telegram.org/bots/features#commands); the entity stops at the first
+// character outside that set. The old version of this helper would happily "match" a
+// command like "/ingest-xml" in full (hyphen included), which is exactly why these
+// tests kept passing 100% while the real /ingest-xml silently never matched anything
+// in production — the fake was more permissive than the real platform.
+function commandEntityLength(commandText: string): number {
+  const match = commandText.match(/^\/[A-Za-z0-9_]*/);
+  return match ? match[0].length : 1;
+}
+
 function commandUpdate(commandText: string, chatId: number, fromId: number): Update {
-  const commandWord = commandText.split(/\s+/)[0] as string;
   return {
     update_id: Math.floor(Math.random() * 1_000_000),
     message: {
@@ -67,7 +80,7 @@ function commandUpdate(commandText: string, chatId: number, fromId: number): Upd
       chat: { id: chatId, type: "group", title: "Test Group" },
       from: { id: fromId, is_bot: false, first_name: "Tester" },
       text: commandText,
-      entities: [{ type: "bot_command", offset: 0, length: commandWord.length }],
+      entities: [{ type: "bot_command", offset: 0, length: commandEntityLength(commandText) }],
     },
   } as unknown as Update;
 }
@@ -79,7 +92,7 @@ describe("registerIngestXmlCommand", () => {
     const calls = stubTelegramApi();
     registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: emptyDrive(), rootFolderId: ROOT });
 
-    await bot.handleUpdate(commandUpdate("/ingest-xml 2026-07-18", 555, NON_ADMIN_ID));
+    await bot.handleUpdate(commandUpdate("/ingest_xml 2026-07-18", 555, NON_ADMIN_ID));
 
     const reply = calls.filter((c) => c.method === "sendMessage").at(-1);
     expect(reply?.payload.text).toContain("restrito a administradores");
@@ -92,7 +105,7 @@ describe("registerIngestXmlCommand", () => {
     const calls = stubTelegramApi();
     registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: emptyDrive(), rootFolderId: ROOT });
 
-    await bot.handleUpdate(commandUpdate("/ingest-xml 2026-07-18", 555, ADMIN_ID));
+    await bot.handleUpdate(commandUpdate("/ingest_xml 2026-07-18", 555, ADMIN_ID));
 
     const replies = calls.filter((c) => c.method === "sendMessage").map((c) => c.payload.text);
     const summaryReply = replies.find((text) => typeof text === "string" && text.includes("Vendas"));
@@ -112,7 +125,7 @@ describe("registerIngestXmlCommand", () => {
     const calls = stubTelegramApi();
     registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: emptyDrive(), rootFolderId: ROOT });
 
-    await bot.handleUpdate(commandUpdate("/ingest-xml 18-07-2026", 555, ADMIN_ID));
+    await bot.handleUpdate(commandUpdate("/ingest_xml 18-07-2026", 555, ADMIN_ID));
 
     const reply = calls.filter((c) => c.method === "sendMessage").at(-1);
     expect(reply?.payload.text).toContain("Formato inválido");
@@ -141,7 +154,7 @@ describe("registerIngestXmlCommand", () => {
     const calls = stubTelegramApi();
     registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: emptyDrive(), rootFolderId: ROOT });
 
-    await bot.handleUpdate(commandUpdate("/ingest-xml 2026-07-18", 555, ADMIN_ID));
+    await bot.handleUpdate(commandUpdate("/ingest_xml 2026-07-18", 555, ADMIN_ID));
 
     const replies = calls.filter((c) => c.method === "sendMessage").map((c) => c.payload.text);
     expect(replies.some((text) => typeof text === "string" && text.includes("processada(s) automaticamente"))).toBe(true);
@@ -181,11 +194,34 @@ describe("registerIngestXmlCommand", () => {
     const calls = stubTelegramApi();
     registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: failingDrive, rootFolderId: ROOT });
 
-    await bot.handleUpdate(commandUpdate("/ingest-xml 2026-07-18", 555, ADMIN_ID));
+    await bot.handleUpdate(commandUpdate("/ingest_xml 2026-07-18", 555, ADMIN_ID));
 
     const replies = calls.filter((c) => c.method === "sendMessage").map((c) => c.payload.text);
     expect(replies.some((text) => typeof text === "string" && text.includes("processada(s) automaticamente"))).toBe(false);
     expect(await awaitingIngestionCountRepo.listByStoreAndDate(db, testStore.id, "2026-07-18")).toHaveLength(1);
+    expect(await dailyIngestionRunRepo.hasAllTypesRunForDate(db, testStore.id, "2026-07-18")).toBe(false);
+  });
+
+  // 2026-07-23: regression test for the bug itself — a hyphen is not a valid character
+  // in a Telegram bot command, so a message like "/ingest-xml" never actually reaches
+  // this handler in production (Telegram's client truncates the bot_command entity at
+  // the hyphen, well before Telegraf's registered "ingest_xml" trigger even gets a
+  // chance to compare). This locks in that platform behavior via the real
+  // registerIngestXmlCommand + Telegraf command matching, not just the fixed entity
+  // helper above, so it fails loudly if a hyphen ever creeps back into a command name.
+  it("does not match a hyphenated command name (Telegram commands only allow letters/digits/underscore)", async () => {
+    const testStore = await createTestStore(db, { telegramGroupId: "555" });
+    const bot = createBot("fake-token", "555");
+    const calls = stubTelegramApi();
+    registerIngestXmlCommand(bot, db, { adminTelegramIds: [String(ADMIN_ID)], driveFiles: emptyDrive(), rootFolderId: ROOT });
+
+    // Same message an admin would have sent against the old, broken "/ingest-xml"
+    // command name — with a realistic entity boundary, Telegram would only tag "/ingest"
+    // as the bot_command, so this must produce absolutely no reply, not even the
+    // unconditional admin-denial message.
+    await bot.handleUpdate(commandUpdate("/ingest-xml 2026-07-18", 555, ADMIN_ID));
+
+    expect(calls.filter((c) => c.method === "sendMessage")).toHaveLength(0);
     expect(await dailyIngestionRunRepo.hasAllTypesRunForDate(db, testStore.id, "2026-07-18")).toBe(false);
   });
 });

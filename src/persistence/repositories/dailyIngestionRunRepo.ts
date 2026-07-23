@@ -14,7 +14,7 @@ export async function hasRunForDate(db: Db, storeId: string, date: string, type:
   return Boolean(found);
 }
 
-// Idempotent by design (unique(storeId, date, type)) — re-running /ingest-xml for the
+// Idempotent by design (unique(storeId, date, type)) — re-running /ingest_xml for the
 // same day is a normal retry (D11: no scheduler, someone re-triggers by hand), not an
 // error.
 export async function recordRun(db: Db, storeId: string, date: string, type: MovementType): Promise<void> {

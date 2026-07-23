@@ -52,6 +52,15 @@ export interface IngestXmlHandlerDeps {
 }
 
 /**
+ * Command name uses an underscore, not a hyphen (2026-07-23 fix, was "/ingest-xml"):
+ * Telegram bot commands only allow Latin letters, digits, and underscores
+ * (https://core.telegram.org/bots/features#commands) — a hyphen isn't part of the
+ * bot_command entity Telegram's client sends back, so Telegraf's entity-based matching
+ * (composer.js, `command = cmdPart.slice(1)`) never saw more than "/ingest", and this
+ * command silently never matched. Confirmed via manual test: zero reply at all,
+ * including no "restrito a administradores" — which fires unconditionally otherwise —
+ * proving the handler was never reached, not that authorization was misbehaving.
+ *
  * B3/B5/B6 bot integration: manual trigger (D11 — no scheduler) for the daily
  * ingestion, restricted to admins. Runs all three ingestion types (venda, recebimento,
  * desperdício) for the given date in one execution — each is isolated in its own
@@ -68,7 +77,7 @@ export interface IngestXmlHandlerDeps {
  * just sales.
  */
 export function registerIngestXmlCommand(bot: Telegraf<Context>, db: Db, deps: IngestXmlHandlerDeps): void {
-  bot.command("ingest-xml", createAdminMiddleware(deps.adminTelegramIds), async (ctx) => {
+  bot.command("ingest_xml", createAdminMiddleware(deps.adminTelegramIds), async (ctx) => {
     const activeStore = await storeRepo.findActiveStore(db);
     if (!activeStore) {
       await ctx.reply("Nenhuma loja ativa configurada.");
@@ -77,7 +86,7 @@ export function registerIngestXmlCommand(bot: Telegraf<Context>, db: Db, deps: I
 
     const dateArg = ctx.message.text.trim().split(/\s+/)[1];
     if (dateArg && !DATE_ONLY_PATTERN.test(dateArg)) {
-      await ctx.reply("Formato inválido. Use: /ingest-xml [AAAA-MM-DD] (sem data, usa hoje).");
+      await ctx.reply("Formato inválido. Use: /ingest_xml [AAAA-MM-DD] (sem data, usa hoje).");
       return;
     }
     const dateIso = dateArg ?? todayIso();
