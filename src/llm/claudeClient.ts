@@ -33,7 +33,11 @@ on that line; otherwise leave it null. Do not invent items that aren't in the te
 
 Today's date is ${todayIso} (YYYY-MM-DD). The message may mention which day the count is for (e.g.,
 "contagem de ontem", "22/07"); resolve it to YYYY-MM-DD format. If no date is mentioned, use today's
-date — most counts are for the current day.`;
+date — most counts are for the current day.
+
+Optional: if the message includes a free-text explanation of a prior divergence (usually a line
+starting with "Motivo:" / "motivo:"), put that explanation in the top-level "motivo" field.
+If there is no such explanation, omit "motivo" or set it to null. Do not invent a motivo.`;
 }
 
 const PARSE_TOOL = {
@@ -45,6 +49,11 @@ const PARSE_TOOL = {
       date: {
         type: "string",
         description: "The date this count is for, in YYYY-MM-DD format.",
+      },
+      motivo: {
+        type: ["string", "null"],
+        description:
+          'Optional free-text reason for a recount divergence (e.g. text after "Motivo:"). null if absent.',
       },
       locations: {
         type: "array",

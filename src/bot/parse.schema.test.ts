@@ -38,6 +38,42 @@ describe("countParseSchema", () => {
     expect(result.locations[0]?.lines[0]?.actualQuantity).toBeNull();
   });
 
+  it("parses optional top-level motivo when present", () => {
+    const result = countParseSchema.parse({
+      ...bothLocations(
+        [{ supplyRaw: "G", quantity: 742, unitKind: "unit" }],
+        [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }],
+      ),
+      motivo: "  Quebrei um G na fritura  ",
+    });
+    expect(result.motivo).toBe("Quebrei um G na fritura");
+  });
+
+  it("defaults motivo to null when absent or blank", () => {
+    const without = countParseSchema.parse(
+      bothLocations([{ supplyRaw: "G", quantity: 1, unitKind: "unit" }], [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }]),
+    );
+    expect(without.motivo).toBeNull();
+
+    const blank = countParseSchema.parse({
+      ...bothLocations(
+        [{ supplyRaw: "G", quantity: 1, unitKind: "unit" }],
+        [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }],
+      ),
+      motivo: "   ",
+    });
+    expect(blank.motivo).toBeNull();
+
+    const explicitNull = countParseSchema.parse({
+      ...bothLocations(
+        [{ supplyRaw: "G", quantity: 1, unitKind: "unit" }],
+        [{ supplyRaw: "G", quantity: 0, unitKind: "unit" }],
+      ),
+      motivo: null,
+    });
+    expect(explicitNull.motivo).toBeNull();
+  });
+
   it("rejects a message with only one location", () => {
     const result = countParseSchema.safeParse({
       date: "2026-07-22",

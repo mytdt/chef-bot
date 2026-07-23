@@ -29,10 +29,24 @@ export const locationBlockSchema = z.object({
 /**
  * Nested parse shape. Zod requires Mezanino AND Cozinha exactly once each — a message
  * with only one location fails validation (confirmed decision).
+ *
+ * `motivo` is top-level like `date` (one explanation for the whole recount message),
+ * optional free text when the collaborator explains a prior divergence. Empty/whitespace
+ * becomes null; absence does not fail validation.
  */
 export const countParseSchema = z
   .object({
     date: z.string().regex(DATE_ONLY_PATTERN, "date must be in YYYY-MM-DD format"),
+    motivo: z
+      .string()
+      .nullish()
+      .transform((value) => {
+        if (value == null) {
+          return null;
+        }
+        const trimmed = value.trim();
+        return trimmed === "" ? null : trimmed;
+      }),
     locations: z.array(locationBlockSchema).min(1),
   })
   .superRefine((data, ctx) => {

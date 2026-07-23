@@ -36,7 +36,11 @@ on that line; otherwise leave it out. Do not invent items that aren't in the tex
 
 Today's date is ${todayIso} (YYYY-MM-DD). The message may mention which day the count is for (e.g.,
 "contagem de ontem", "22/07"); resolve it to YYYY-MM-DD format. If no date is mentioned, use today's
-date — most counts are for the current day.`;
+date — most counts are for the current day.
+
+Optional: if the message includes a free-text explanation of a prior divergence (usually a line
+starting with "Motivo:" / "motivo:"), put that explanation in the top-level "motivo" field.
+If there is no such explanation, omit "motivo". Do not invent a motivo.`;
 }
 
 const PARSE_FUNCTION_NAME = "record_count_items";
@@ -50,6 +54,11 @@ const PARSE_FUNCTION_DECLARATION: FunctionDeclaration = {
       date: {
         type: Type.STRING,
         description: "The date this count is for, in YYYY-MM-DD format.",
+      },
+      motivo: {
+        type: Type.STRING,
+        description:
+          'Optional free-text reason for a recount divergence (e.g. text after "Motivo:"). Omit if absent.',
       },
       locations: {
         type: Type.ARRAY,

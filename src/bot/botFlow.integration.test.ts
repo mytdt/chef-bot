@@ -134,31 +134,67 @@ describe("bot flow (message -> parse -> confirmation -> comparison -> response/a
     expect(finalReply?.payload.text).not.toContain("Alerta");
   });
 
-  it("posts an alert to the store group and does not reveal the expected value when the count doesn't match", async () => {
+  it("posts one consolidated group alert with informed/expected/difference when counts don't match", async () => {
     const testStore = await createTestStore(db, { telegramGroupId: "555" });
     await createTestRoutine(db, testStore.id, { name: COUNT_ROUTINE_NAME });
-    await createTestSupply(db, testStore.id, { code: "F", name: "Burger F" });
+    // Expected G = 100 (via receipt), W = 0 — both reported values will mismatch.
+    const supplyG = await createTestSupply(db, testStore.id, { code: "G", name: "Burger G" });
+    await createTestSupply(db, testStore.id, { code: "W", name: "Burger W" });
+    await inventoryMovementRepo.insert(db, {
+      supplyId: supplyG.id,
+      type: "receipt",
+      quantity: 100,
+    });
     await recordAllTypesIngested(testStore.id);
 
     const bot = createBot("fake-token", "555");
     const calls = stubTelegramApi();
-    registerCountHandler(bot, { llmParser: fakeLlmParser("F", 50) });
+    const multiParser: LLMParser = {
+      parse: vi.fn().mockResolvedValue({
+        data: {
+          date: TEST_DATE,
+          locations: [
+            {
+              location: "mezanino",
+              lines: [
+                { supplyRaw: "G", quantity: 50, unitKind: "unit" },
+                { supplyRaw: "W", quantity: 12, unitKind: "unit" },
+              ],
+            },
+            {
+              location: "cozinha",
+              lines: [
+                { supplyRaw: "G", quantity: 0, unitKind: "unit" },
+                { supplyRaw: "W", quantity: 0, unitKind: "unit" },
+              ],
+            },
+          ],
+        },
+        provider: "claude",
+      }),
+    };
+    registerCountHandler(bot, { llmParser: multiParser });
     registerConfirmationHandler(bot, db);
 
-    await bot.handleUpdate(textMessageUpdate("50 F", 555));
+    await bot.handleUpdate(textMessageUpdate("50 G / 12 W", 555));
     const confirmData = callbackDataFromLastReply(calls);
 
     await bot.handleUpdate(callbackQueryUpdate(confirmData, 555));
 
-    const groupAlert = calls.find(
+    const groupAlerts = calls.filter(
       (c) => c.method === "sendMessage" && typeof c.payload.text === "string" && c.payload.text.includes("@all"),
     );
-    expect(groupAlert).toBeDefined();
-    expect(groupAlert?.payload.text).not.toMatch(/\b0\b/);
-    expect(groupAlert?.payload.reply_markup).toBeUndefined();
+    expect(groupAlerts).toHaveLength(1);
+    const alertText = String(groupAlerts[0]?.payload.text);
+    expect(alertText).toContain("2 insumos");
+    expect(alertText).toContain("informado: 50 | esperado: 100 | diferença: -50");
+    expect(alertText).toContain("informado: 12 | esperado: 0 | diferença: +12");
+    expect(groupAlerts[0]?.payload.reply_markup).toBeUndefined();
 
     const confirmationReply = calls.filter((c) => c.method === "sendMessage").at(-1);
     expect(confirmationReply?.payload.text).toContain("Alerta enviado ao grupo");
+    // Immediate reply still names-only (no expected numbers duplicated there).
+    expect(confirmationReply?.payload.text).not.toContain("esperado:");
   });
 
   it("parks the count as awaiting ingestion (does not compare/alert) when none of the date's ingestion types have run yet", async () => {
