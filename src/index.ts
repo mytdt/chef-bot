@@ -5,12 +5,7 @@ import { createGeminiClient, createGeminiParser } from "src/llm/geminiClient.js"
 import { createFallbackParser } from "src/llm/fallbackParser.js";
 import type { LLMParser } from "src/llm/llmParser.js";
 import { createBot } from "src/bot/telegram.js";
-import { registerMovementHandler } from "src/bot/handlers/movement.js";
-import { registerConfirmationHandler } from "src/bot/handlers/confirmation.js";
-import { registerCountHandler } from "src/bot/handlers/count.js";
-import { registerIngestXmlCommand } from "src/bot/handlers/ingestXml.js";
-import { registerPingCommand } from "src/bot/handlers/ping.js";
-import { registerLlmCheckCommand } from "src/bot/handlers/llmCheck.js";
+import { registerHandlers } from "src/bot/registerHandlers.js";
 import { createDriveFilesAndContentApi } from "src/salesXml/googleDriveClient.js";
 import * as storeRepo from "src/persistence/repositories/storeRepo.js";
 
@@ -35,17 +30,15 @@ async function main() {
   }
   const bot = createBot(env.BOT_TOKEN, activeStore.telegramGroupId);
 
-  // Specific commands and callbacks before the free-text handler (catch-all), which
-  // also guards itself against command messages as a safety net.
-  registerPingCommand(bot);
-  registerLlmCheckCommand(bot, { adminTelegramIds: env.ADMIN_TELEGRAM_IDS, llmParser });
-  registerMovementHandler(bot, db);
-  registerConfirmationHandler(bot, db);
-  registerCountHandler(bot, { llmParser });
-  registerIngestXmlCommand(bot, db, {
+  registerHandlers(bot, {
+    db,
+    llmParser,
     adminTelegramIds: env.ADMIN_TELEGRAM_IDS,
-    driveFiles,
-    rootFolderId: env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
+    ingestXml: {
+      adminTelegramIds: env.ADMIN_TELEGRAM_IDS,
+      driveFiles,
+      rootFolderId: env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
+    },
   });
 
   const stop = (signal: string) => {

@@ -22,10 +22,13 @@ function formatSummary(items: { supply: string; quantity: number; actualQuantity
  * explicit confirmation before any calculation or comparison (see handlers/confirmation.ts).
  */
 export function registerCountHandler(bot: Telegraf<Context>, deps: CountHandlerDeps): void {
-  bot.on(message("text"), async (ctx) => {
+  bot.on(message("text"), async (ctx, next) => {
     const text = ctx.message.text;
+    // Skip commands so they can reach bot.command handlers registered later in
+    // the chain. Returning without next() used to swallow every "/..." message
+    // (including /ingest_xml) — see registerHandlers.ts.
     if (text.startsWith("/")) {
-      return;
+      return next();
     }
 
     const collaboratorTelegramId = ctx.from.id.toString();
