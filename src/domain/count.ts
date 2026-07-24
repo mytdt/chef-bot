@@ -24,10 +24,12 @@ export interface ProcessCountItemResult {
 
 /**
  * Orchestrates the creation of a Count for an item already confirmed by the
- * collaborator (D1): resolves the Supply, looks up the previous count + movements
- * since then, calculates the expected value, decides match/no-match and persists a
- * new immutable record. `item.quantity` is already the Mezanino+Cozinha aggregate in
- * units; `item.actualQuantity` is the D5 override of that aggregate when present.
+ * collaborator (D1): resolves the Supply, looks up the previous *matched* count +
+ * movements since then, calculates the expected value, decides match/no-match and
+ * persists a new immutable record. Confirmed-but-mismatched counts are ignored as
+ * baseline (see findLastConfirmedBySupply). `item.quantity` is already the
+ * Mezanino+Cozinha aggregate in units; `item.actualQuantity` is the D5 override of
+ * that aggregate when present.
  */
 export async function processCountItem(
   db: Db,

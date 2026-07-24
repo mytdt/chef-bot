@@ -10,7 +10,7 @@ import { seedBaselineCounts } from "src/persistence/seedBaselineCounts.js";
  * ⚠️  Staging / test-reset only. Do NOT run in production after real collaborator
  * counts have accumulated. Idempotency is skip-only (never overwrite), but a mistaken
  * run can still insert an extra "previous" point if you pick a new cutoffAt, which
- * would then win `findLastConfirmedBySupply` ordered by created_at.
+ * would then win `findLastConfirmedBySupply` (matched + confirmed, ordered by created_at).
  *
  * Prerequisites: `npm run seed` (store, routine, supplies) already applied.
  * Config: edit `src/persistence/seedBaseline.config.ts`.

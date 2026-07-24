@@ -34,11 +34,19 @@ export async function insert(db: Db, data: NewCount) {
   return created;
 }
 
+/**
+ * Baseline for the next expected-value calculation: last collaborator-confirmed count
+ * that *matched*. A confirmed-but-mismatched recount must not become the previous
+ * count — otherwise the next attempt "chases its own tail" (reported value from the
+ * failed attempt becomes the new expected). Seed baselines insert matched=true.
+ */
 export async function findLastConfirmedBySupply(db: Db, supplyId: string) {
   const [last] = await db
     .select()
     .from(count)
-    .where(and(eq(count.supplyId, supplyId), eq(count.confirmedByCollaborator, true)))
+    .where(
+      and(eq(count.supplyId, supplyId), eq(count.confirmedByCollaborator, true), eq(count.matched, true)),
+    )
     .orderBy(desc(count.createdAt))
     .limit(1);
   return last ?? null;

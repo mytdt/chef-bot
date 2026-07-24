@@ -93,6 +93,43 @@ describe("countRepo", () => {
     expect(found?.id).toBe(confirmed.id);
   });
 
+  it("ignores confirmed-but-mismatched counts so a failed recount cannot become the baseline", async () => {
+    // Real bug (Wagyu): count1 reported 300 vs expected 330 (matched=false); count2
+    // must still baseline against the last *matched* count (330), not against 300.
+    const testStore = await createTestStore(db);
+    const testSupply = await createTestSupply(db, testStore.id, { code: "W", name: "Burger W" });
+    const testRoutine = await createTestRoutine(db, testStore.id);
+
+    const lastMatched = await countRepo.insert(
+      db,
+      await baseCount({
+        routineId: testRoutine.id,
+        supplyId: testSupply.id,
+        reportedValue: 330,
+        expectedValue: 330,
+        matched: true,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await countRepo.insert(
+      db,
+      await baseCount({
+        routineId: testRoutine.id,
+        supplyId: testSupply.id,
+        reportedValue: 300,
+        expectedValue: 330,
+        matched: false,
+        confirmedByCollaborator: true,
+      }),
+    );
+
+    const found = await countRepo.findLastConfirmedBySupply(db, testSupply.id);
+
+    expect(found?.id).toBe(lastMatched.id);
+    expect(found?.reportedValue).toBe(330);
+    expect(found?.matched).toBe(true);
+  });
+
   it("returns null when there is no previous confirmed count", async () => {
     const testStore = await createTestStore(db);
     const testSupply = await createTestSupply(db, testStore.id);
