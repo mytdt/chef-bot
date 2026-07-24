@@ -7,6 +7,7 @@ import { registerCountHandler } from "src/bot/handlers/count.js";
 import { registerIngestXmlCommand, type IngestXmlHandlerDeps } from "src/bot/handlers/ingestXml.js";
 import { registerPingCommand } from "src/bot/handlers/ping.js";
 import { registerLlmCheckCommand } from "src/bot/handlers/llmCheck.js";
+import { registerAcceptCommand } from "src/bot/handlers/accept.js";
 
 export interface RegisterHandlersDeps {
   db: Db;
@@ -33,6 +34,7 @@ export function registerHandlers(bot: Telegraf<Context>, deps: RegisterHandlersD
     adminTelegramIds: deps.adminTelegramIds,
     llmParser: deps.llmParser,
   });
+  registerAcceptCommand(bot, deps.db);
   registerMovementHandler(bot, deps.db);
   registerConfirmationHandler(bot, deps.db);
   registerIngestXmlCommand(bot, deps.db, deps.ingestXml);

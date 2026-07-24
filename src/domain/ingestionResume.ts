@@ -22,6 +22,7 @@ export async function resumeAwaitingCounts(
       storeId: entry.storeId,
       routineId: entry.routineId,
       collaboratorTelegramId: entry.collaboratorTelegramId,
+      confirmedByTelegramId: entry.confirmedByTelegramId,
       rawText: entry.rawText,
       llmUsed: entry.llmUsed,
       items: entry.items,

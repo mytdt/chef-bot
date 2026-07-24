@@ -37,12 +37,21 @@ export async function processCountItem(
     storeId: string;
     routineId: string;
     collaboratorTelegramId: string;
+    confirmedByTelegramId: string | null;
     rawText: string;
     llmUsed: LlmProvider;
     item: AggregatedCountItem;
   },
 ): Promise<ProcessCountItemResult> {
-  const { storeId, routineId, collaboratorTelegramId, rawText, llmUsed, item } = params;
+  const {
+    storeId,
+    routineId,
+    collaboratorTelegramId,
+    confirmedByTelegramId,
+    rawText,
+    llmUsed,
+    item,
+  } = params;
 
   const supplyFound = await supplyRepo.findByCode(db, storeId, item.supply);
   if (!supplyFound) {
@@ -87,9 +96,11 @@ export async function processCountItem(
   const locationBreakdown: CountLocationBreakdown = item.locationBreakdown;
 
   const countCreated = await countRepo.insert(db, {
+    storeId,
     routineId,
     supplyId: supplyFound.id,
     collaboratorTelegramId,
+    confirmedByTelegramId,
     rawText,
     reportedValue: item.quantity,
     actualQuantityReported: item.actualQuantity,

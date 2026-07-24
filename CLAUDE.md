@@ -27,9 +27,10 @@ docker compose up -d     # sobe Postgres + serviço em containers
 
 ## Regras de negócio inegociáveis
 
-- **Contagem às cegas:** o `valor_esperado` NUNCA deve aparecer em nenhuma mensagem enviada ao colaborador via Telegram. Se uma feature nova expõe esse valor de qualquer forma (log visível ao usuário, mensagem de erro, etc.), é bug de segurança, não só de UX.
-- **Confirmação antes de comparar:** toda contagem parseada via LLM deve ser confirmada explicitamente pelo colaborador antes do sistema rodar a comparação. Nunca comparar direto no primeiro parse.
-- **Imutabilidade da contagem:** `texto_bruto` da mensagem original nunca é sobrescrito. Toda contagem gera um novo registro.
+- **Esperado no Telegram (amendido 2026-07-23):** o alerta consolidado no **grupo** e o comando `/aceitar` **mostram** informado / esperado / diferença (decisão explícita — revoga a regra antiga de “contagem às cegas” nesses canais). A resposta imediata pós-confirmação D1 ao colaborador ainda pode citar só nomes. Não reintroduzir esperado em mensagens que não forem alerta/aceite sem decisão humana.
+- **Confirmação antes de comparar:** toda contagem parseada via LLM deve ser confirmada explicitamente pelo colaborador antes do sistema rodar a comparação. Nunca comparar direto no primeiro parse. Quem clicou Confirmar fica em `routine_check.confirmed_by_telegram_id`.
+- **Imutabilidade da contagem:** `texto_bruto` da mensagem original nunca é sobrescrito. Toda contagem gera um novo registro (`count` + envelope `routine_check`). Exceção write-once: aceite de divergência preenche `accepted_*` no envelope.
+- **Baseline do esperado:** última contagem confirmada com `matched=true` **ou** aceite (`accepted_at` preenchido). Mismatch não aceito não vira baseline (PR #27).
 - **Fórmula do esperado é fixa:** `Esperado = Recebimento + Contagem Anterior − Vendas − Desperdício`. Já validada em produção via planilha/script — não alterar sem validação explícita do humano.
 
 ## Convenções

@@ -12,7 +12,9 @@ export function getTestDb(): Db {
 }
 
 export async function resetDatabase(db: Db): Promise<void> {
-  await db.execute(sql`TRUNCATE TABLE alert, count, inventory_movement, supply, routine, store CASCADE`);
+  await db.execute(
+    sql`TRUNCATE TABLE alert, count, routine_check, awaiting_ingestion_count, inventory_movement, daily_ingestion_run, processed_sales_file, processed_receipt_file, processed_waste_file, supply, routine, store CASCADE`,
+  );
 }
 
 export async function createTestStore(db: Db, overrides: Partial<typeof store.$inferInsert> = {}) {

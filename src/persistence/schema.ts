@@ -34,6 +34,8 @@ export const movementSourceEnum = pgEnum("movement_source", ["manual", "3schecko
 // appears when the fallback kicked in (timeout/5xx/429 from Claude).
 export const llmProviderEnum = pgEnum("llm_provider", ["claude", "gemini"]);
 
+export const routineCheckStatusEnum = pgEnum("routine_check_status", ["matched", "mismatched", "accepted"]);
+
 // doublePrecision (not integer) because supplies can be counted in fractional units
 // (kg, liters) for some categories. Burgers specifically are always whole units —
 // that invariant is enforced at the input boundary (domain/quantityRules.ts), not
@@ -93,6 +95,39 @@ export const routine = pgTable("routine", {
 });
 
 /**
+ * Generic envelope for one execution of a Routine (G2). Today every row pairs 1:1 with
+ * a Count (expected_numeric). Future verification types can use `payload` instead of
+ * (or in addition to) a typed child table.
+ *
+ * Acceptance (`accepted_*`) is write-once on this row — does not rewrite Count values.
+ */
+export const routineCheck = pgTable("routine_check", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  routineId: uuid("routine_id")
+    .notNull()
+    .references(() => routine.id),
+  storeId: uuid("store_id")
+    .notNull()
+    .references(() => store.id),
+  // Null reserved for future routines without a Supply (e.g. cleaning checklist).
+  supplyId: uuid("supply_id").references(() => supply.id),
+  verificationType: verificationTypeEnum("verification_type").notNull(),
+  status: routineCheckStatusEnum("status").notNull(),
+  /** Who sent the original count message (or seed-manual). */
+  collaboratorTelegramId: text("collaborator_telegram_id").notNull(),
+  /** Who clicked D1 "Confirmar". Null on backfilled / seed-manual rows. */
+  confirmedByTelegramId: text("confirmed_by_telegram_id"),
+  /** Who ran /aceitar on a mismatch. Write-once with acceptedAt. */
+  acceptedByTelegramId: text("accepted_by_telegram_id"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  rawText: text("raw_text").notNull(),
+  llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
+  /** Placeholder for non-numeric routine payloads — unused for meat count MVP. */
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Per-location detail for a Count (S1). Null on baseline/seed-manual rows and any
  * pre-feature counts — `reportedValue` alone remains the aggregate used by expected.
  * Comparison never reads this column.
@@ -109,30 +144,37 @@ export type CountLocationBreakdownLine = {
   units: number;
 };
 
-export const count = pgTable("count", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  routineId: uuid("routine_id")
-    .notNull()
-    .references(() => routine.id),
-  supplyId: uuid("supply_id")
-    .notNull()
-    .references(() => supply.id),
-  collaboratorTelegramId: text("collaborator_telegram_id").notNull(),
-  rawText: text("raw_text").notNull(),
-  // Aggregate units across Mezanino+Cozinha (post package→unit conversion). Still the
-  // only quantity the expected-value formula / match decision use.
-  reportedValue: quantity("reported_value").notNull(),
-  // D5: optional override of the *aggregate* total (not per-location). Coexists with
-  // fixed count-package factors — factors convert lines; this overrides the final total.
-  actualQuantityReported: quantity("actual_quantity_reported"),
-  // Audit/D1 detail only. Null for seed-manual baseline rows (no backfill required).
-  locationBreakdown: jsonb("location_breakdown").$type<CountLocationBreakdown>(),
-  expectedValue: quantity("expected_value").notNull(),
-  matched: boolean("matched").notNull(),
-  confirmedByCollaborator: boolean("confirmed_by_collaborator").notNull().default(false),
-  llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const count = pgTable(
+  "count",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    routineCheckId: uuid("routine_check_id")
+      .notNull()
+      .references(() => routineCheck.id),
+    routineId: uuid("routine_id")
+      .notNull()
+      .references(() => routine.id),
+    supplyId: uuid("supply_id")
+      .notNull()
+      .references(() => supply.id),
+    collaboratorTelegramId: text("collaborator_telegram_id").notNull(),
+    rawText: text("raw_text").notNull(),
+    // Aggregate units across Mezanino+Cozinha (post package→unit conversion). Still the
+    // only quantity the expected-value formula / match decision use.
+    reportedValue: quantity("reported_value").notNull(),
+    // D5: optional override of the *aggregate* total (not per-location). Coexists with
+    // fixed count-package factors — factors convert lines; this overrides the final total.
+    actualQuantityReported: quantity("actual_quantity_reported"),
+    // Audit/D1 detail only. Null for seed-manual baseline rows (no backfill required).
+    locationBreakdown: jsonb("location_breakdown").$type<CountLocationBreakdown>(),
+    expectedValue: quantity("expected_value").notNull(),
+    matched: boolean("matched").notNull(),
+    confirmedByCollaborator: boolean("confirmed_by_collaborator").notNull().default(false),
+    llmUsed: llmProviderEnum("llm_used").notNull().default("claude"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.routineCheckId)],
+);
 
 // C6: alert is a one-shot notification to the group — no acknowledgment/escalation
 // state (removed, amends D2/D12). Kept as a table (not just a sent message) purely as
@@ -249,6 +291,8 @@ export const awaitingIngestionCount = pgTable("awaiting_ingestion_count", {
     .notNull()
     .references(() => routine.id),
   collaboratorTelegramId: text("collaborator_telegram_id").notNull(),
+  /** Who clicked D1 Confirm — preserved so resume after /ingest_xml still records them. */
+  confirmedByTelegramId: text("confirmed_by_telegram_id").notNull(),
   chatId: text("chat_id").notNull(),
   rawText: text("raw_text").notNull(),
   date: date("date").notNull(),

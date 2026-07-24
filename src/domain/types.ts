@@ -1,3 +1,5 @@
+export type RoutineCheckStatus = "matched" | "mismatched" | "accepted";
+
 export type SupplyCategory = "burger" | "cheese" | "sauce" | "potato" | "flavors_house";
 
 export type VerificationType = "expected_numeric" | "binary" | "value_range" | "expiration" | "photo_evidence";

@@ -77,22 +77,32 @@ Rotina {
 }
 ```
 
-### 4.4 Entidade `Contagem`
+### 4.4 Entidade `Contagem` + envelope `routine_check`
+
+Histórico genérico de execução de rotina: `routine_check` (envelope). Contagem de carne é o payload tipado `count` (1:1 via `count.routine_check_id`).
+
 ```
+RoutineCheck {
+  id: string (uuid)
+  routine_id, store_id, supply_id (nullable em rotinas futuras sem insumo)
+  verification_type: enum (snapshot)
+  status: enum ["matched", "mismatched", "accepted"]
+  collaborator_telegram_id: string      // quem enviou a mensagem
+  confirmed_by_telegram_id: string | null  // quem clicou Confirmar (D1)
+  accepted_by_telegram_id / accepted_at    // /aceitar — write-once
+  raw_text, llm_used, payload jsonb?, created_at
+}
+
 Contagem {
   id: string (uuid)
-  rotina_id: string (FK -> Rotina)
-  insumo_id: string (FK -> Insumo)
-  colaborador_telegram_id: string
-  texto_bruto: string                  // mensagem original, sem alteração
-  valor_informado: number
-  quantidade_real_informada: number | null   // D5 (confirmado) — override pontual quando o pacote tem qtd variável
-  valor_esperado: number                // calculado, nunca exposto ao colaborador
-  bateu: boolean
-  confirmado_pelo_colaborador: boolean  // ver D1 — fluxo de confirmação do parse
-  criado_em: datetime
+  routine_check_id: string (FK -> RoutineCheck, unique)
+  rotina_id, insumo_id, collaborator_telegram_id, texto_bruto
+  valor_informado, quantidade_real_informada, location_breakdown?
+  valor_esperado, bateu, confirmado_pelo_colaborador, criado_em
 }
 ```
+
+Baseline do próximo esperado: última Contagem confirmada com `bateu=true` **ou** RoutineCheck com `accepted_at` preenchido.
 
 ### 4.5 Entidade `Alerta`
 ```
@@ -100,13 +110,9 @@ Alerta {
   id: string (uuid)
   contagem_id: string (FK -> Contagem)
   enviado_em: datetime
-  reconhecido: boolean                 // ver D2 — fluxo de escalonamento
-  reconhecido_por: string | null
-  reconhecido_em: datetime | null
-  escalonado: boolean
-  escalonado_para: string | null
 }
 ```
+(C6: sem reconhecimento/escalonamento — amendido; D2 original aposentado.)
 
 ### 4.6 Entidade `HistoricoMovimento` (Recebimento / Venda / Desperdício)
 Necessária para calcular `valor_esperado`. Substitui as abas "Histórico de Saída" da planilha.
@@ -136,10 +142,11 @@ Todas as 5 decisões confirmadas nas opções originalmente assumidas — sem aj
 
 ## 6. Regras de negócio centrais
 
-1. `valor_esperado = recebimento + contagem_anterior − vendas − desperdicio`, calculado por Insumo, com base nos registros de `HistoricoMovimento` desde a última contagem.
-2. O `valor_esperado` nunca é enviado ao colaborador em nenhuma mensagem do bot.
-3. Toda contagem gera um registro imutável (`texto_bruto` preservado) — nunca sobrescrever, sempre criar novo registro.
-4. Bot só processa mensagens de colaboradores autorizados no grupo configurado (⚠️ definir lista de autorização — não estava no plano original, precisa de decisão).
+1. `valor_esperado = recebimento + contagem_anterior − vendas − desperdicio`, calculado por Insumo, com base nos registros de `HistoricoMovimento` desde a última contagem **elegível como baseline** (matched ou aceita).
+2. O `valor_esperado` aparece no **alerta consolidado do grupo** e na resposta de `/aceitar` (amendido 2026-07-23; a regra antiga de “nunca expor” foi revogada nesses canais). Não espalhar esperado em outros fluxos sem decisão explícita.
+3. Toda contagem gera um registro imutável de valores (`texto_bruto` preservado) — nunca sobrescrever valores; aceite só preenche `accepted_*` no envelope (write-once).
+4. Bot só processa mensagens do grupo configurado da loja (D9 — `store.telegram_group_id`).
+5. `/aceitar <código|nome>`: qualquer membro do grupo pode aceitar a última divergência não aceita daquele insumo como estoque real (sem permissão de admin).
 
 ## 7. Arquivos e módulos principais (sugestão de estrutura)
 

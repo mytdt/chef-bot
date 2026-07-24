@@ -8,6 +8,7 @@ export interface NewAwaitingIngestionCount {
   storeId: string;
   routineId: string;
   collaboratorTelegramId: string;
+  confirmedByTelegramId: string;
   chatId: string;
   rawText: string;
   date: string;

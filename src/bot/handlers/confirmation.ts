@@ -43,12 +43,15 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
     // deducted). Park it instead of comparing against an incomplete picture; an admin
     // running /ingest_xml later resumes it automatically (ingestionResume.ts), since
     // that command always runs all three types together for the date it's given.
+    const confirmedByTelegramId = ctx.from?.id?.toString() ?? pendingCount.collaboratorTelegramId;
+
     const ingested = await dailyIngestionRunRepo.hasAllTypesRunForDate(db, activeStore.id, pendingCount.date);
     if (!ingested) {
       await awaitingIngestionCountRepo.insert(db, {
         storeId: activeStore.id,
         routineId: routine.id,
         collaboratorTelegramId: pendingCount.collaboratorTelegramId,
+        confirmedByTelegramId,
         chatId: String(pendingCount.chatId),
         rawText: pendingCount.rawText,
         date: pendingCount.date,
@@ -65,6 +68,7 @@ export function registerConfirmationHandler(bot: Telegraf<Context>, db: Db): voi
       storeId: activeStore.id,
       routineId: routine.id,
       collaboratorTelegramId: pendingCount.collaboratorTelegramId,
+      confirmedByTelegramId,
       rawText: pendingCount.rawText,
       llmUsed: pendingCount.llmUsed,
       items: pendingCount.items,

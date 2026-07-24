@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "src/persistence/db.js";
-import { count } from "src/persistence/schema.js";
+import { count, routineCheck } from "src/persistence/schema.js";
 import * as storeRepo from "src/persistence/repositories/storeRepo.js";
 import * as routineRepo from "src/persistence/repositories/routineRepo.js";
 import * as supplyRepo from "src/persistence/repositories/supplyRepo.js";
@@ -98,12 +98,31 @@ export async function seedBaselineCounts(db: Db, rawConfig: SeedBaselineConfig):
       continue;
     }
 
-    // Insert directly (not via countRepo): baseline needs an explicit createdAt at the
-    // cutover instant. countRepo.insert always uses DB defaultNow() and must stay
-    // unchanged for the real collaborator flow.
+    // Insert envelope + count directly (not via countRepo): baseline needs an explicit
+    // createdAt at the cutover instant. countRepo.insert uses defaultNow() for both.
+    const [check] = await db
+      .insert(routineCheck)
+      .values({
+        routineId: routine.id,
+        storeId: activeStore.id,
+        supplyId: supplyFound.id,
+        verificationType: "expected_numeric",
+        status: "matched",
+        collaboratorTelegramId: BASELINE_COLLABORATOR_TELEGRAM_ID,
+        confirmedByTelegramId: null,
+        rawText: BASELINE_RAW_TEXT,
+        llmUsed: "claude",
+        createdAt: cutoffAt,
+      })
+      .returning();
+    if (!check) {
+      throw new Error(`Failed to insert baseline routine_check for supply "${item.supplyCode}".`);
+    }
+
     const [created] = await db
       .insert(count)
       .values({
+        routineCheckId: check.id,
         routineId: routine.id,
         supplyId: supplyFound.id,
         collaboratorTelegramId: BASELINE_COLLABORATOR_TELEGRAM_ID,

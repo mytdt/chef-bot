@@ -18,6 +18,7 @@ async function newEntry(storeId: string, routineId: string, overrides: { date?: 
     storeId,
     routineId,
     collaboratorTelegramId: "12345",
+    confirmedByTelegramId: "12345",
     chatId: "555",
     rawText: "10 G",
     date: overrides.date ?? "2026-07-22",

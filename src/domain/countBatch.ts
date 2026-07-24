@@ -35,6 +35,7 @@ export async function processConfirmedItems(
     storeId: string;
     routineId: string;
     collaboratorTelegramId: string;
+    confirmedByTelegramId: string | null;
     rawText: string;
     llmUsed: LlmProvider;
     items: AggregatedCountItem[];
@@ -48,6 +49,7 @@ export async function processConfirmedItems(
       storeId: params.storeId,
       routineId: params.routineId,
       collaboratorTelegramId: params.collaboratorTelegramId,
+      confirmedByTelegramId: params.confirmedByTelegramId,
       rawText: params.rawText,
       llmUsed: params.llmUsed,
       item,

@@ -23,9 +23,11 @@ async function createTestCount(storeId: string) {
   const testSupply = await createTestSupply(db, storeId);
   const testRoutine = await createTestRoutine(db, storeId);
   return countRepo.insert(db, {
+    storeId,
     routineId: testRoutine.id,
     supplyId: testSupply.id,
     collaboratorTelegramId: "12345",
+    confirmedByTelegramId: "12345",
     rawText: "380 W",
     reportedValue: 380,
     actualQuantityReported: null,
