@@ -285,7 +285,7 @@ describe("baseline + /confirma_contagem invariants (PLAN §7.2)", () => {
       matched: false,
       confirmedByCollaborator: true,
     });
-    // matched must not appear
+    // Later matched recount for F — F is no longer pending; W still is.
     await countRepo.insert(db, {
       storeId: testStore.id,
       routineId: testRoutine.id,
@@ -302,9 +302,8 @@ describe("baseline + /confirma_contagem invariants (PLAN §7.2)", () => {
     });
 
     const pending = await routineCheckRepo.findPendingMismatchesByStore(db, testStore.id);
-    expect(pending).toHaveLength(2);
-    expect(pending.map((p) => p.supplyCode)).toEqual(["F", "W"]);
-    expect(pending[0]?.difference).toBe(-1);
-    expect(pending[1]?.difference).toBe(-30);
+    expect(pending).toHaveLength(1);
+    expect(pending.map((p) => p.supplyCode)).toEqual(["W"]);
+    expect(pending[0]?.difference).toBe(-30);
   });
 });

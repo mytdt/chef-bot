@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { Db } from "src/persistence/db.js";
 import type { LlmProvider, RoutineCheckStatus, VerificationType } from "src/domain/types.js";
 import { count, routineCheck, supply } from "src/persistence/schema.js";
@@ -77,13 +77,20 @@ export async function acceptIfPending(
 }
 
 /**
- * "Pendente" for the user = mismatched AND not yet accepted (no new status enum).
- * Ordered oldest-first so the numbered list is stable for the selection snapshot.
+ * Current pending mismatches for `/confirma_contagem`: at most one row per supply,
+ * and only when that supply's *latest* routine_check (any status) is still
+ * mismatched and not accepted. Older mismatches superseded by a later match or
+ * accept must not appear (staging bug: F/G/W repeated after a matched recount).
+ *
+ * Ordered oldest-first among the current pending set so the numbered list is stable.
  */
 export async function findPendingMismatchesByStore(db: Db, storeId: string): Promise<PendingMismatchRow[]> {
   const rows = await db
     .select({
       routineCheckId: routineCheck.id,
+      supplyId: routineCheck.supplyId,
+      status: routineCheck.status,
+      acceptedAt: routineCheck.acceptedAt,
       supplyCode: supply.code,
       supplyName: supply.name,
       reportedValue: count.reportedValue,
@@ -94,16 +101,22 @@ export async function findPendingMismatchesByStore(db: Db, storeId: string): Pro
     .from(routineCheck)
     .innerJoin(count, eq(count.routineCheckId, routineCheck.id))
     .innerJoin(supply, eq(supply.id, routineCheck.supplyId))
-    .where(
-      and(
-        eq(routineCheck.storeId, storeId),
-        eq(routineCheck.status, "mismatched"),
-        isNull(routineCheck.acceptedAt),
-      ),
-    )
-    .orderBy(asc(routineCheck.createdAt));
+    .where(eq(routineCheck.storeId, storeId))
+    .orderBy(desc(routineCheck.createdAt));
 
-  return rows.map((row) => {
+  const latestBySupply = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!row.supplyId) continue;
+    if (!latestBySupply.has(row.supplyId)) {
+      latestBySupply.set(row.supplyId, row);
+    }
+  }
+
+  const pending = [...latestBySupply.values()]
+    .filter((row) => row.status === "mismatched" && row.acceptedAt === null)
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  return pending.map((row) => {
     const reportedValue = effectiveValue({
       reportedValue: row.reportedValue,
       actualQuantityReported: row.actualQuantityReported,
