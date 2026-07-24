@@ -20,10 +20,33 @@ API + bot de Telegram que automatiza rotinas operacionais de uma hamburgueria (B
 npm run dev              # roda o bot localmente com hot reload
 npm test                 # roda a suíte de testes
 npm run migrate          # aplica migrações do banco
+npm run backup           # pg_dump local com timestamp → backups/
 docker compose up -d     # sobe Postgres + serviço em containers
+docker compose down      # para containers — PRESERVA o volume/dado
 ```
 
-(Ajustar este bloco assim que os scripts reais existirem no `package.json` — este é um ponto de partida, não confirmado ainda.)
+## Proteção de dados (obrigatório)
+
+Já perdemos correção de `telegram_group_id` duas vezes por volume Postgres recriado. Daqui pra frente:
+
+### Migrations sempre aditivas por padrão
+
+- **Nunca** escrever migration destrutiva (`DROP COLUMN`, `DROP TABLE`, `TRUNCATE`, `ALTER` que descarta dado existente) **sem confirmação humana explícita** antes — mesmo que pareça “só cleanup”.
+- Padrão: criar o novo → backfill quando precisar → só depois apertar constraint (`NOT NULL` / `UNIQUE`). Nunca remover dado de quem já existe no banco.
+- Exemplos corretos: migrations `0007`–`0010` (aditivas + backfill).
+
+### Docker Compose — volume
+
+- **Nunca** usar `docker compose down -v`. O `-v` apaga o volume nomeado (`chefbot_db_data`) e zera o banco.
+- Use só `docker compose down` (sem `-v`) para parar containers e **preservar** o dado.
+
+### Backup antes de risco
+
+```bash
+npm run backup   # grava backups/chefbot-YYYYMMDD-HHMMSS.sql (gitignored)
+```
+
+Rode **antes** de qualquer migration que não seja óbvia/aditiva, antes de mexer em dado de staging/produção real, ou antes de experimentos manuais no Postgres. Prefere o `pg_dump` via serviço `db` do compose se estiver up; senão usa `pg_dump` no host + `DATABASE_URL`.
 
 ## Regras de negócio inegociáveis
 
@@ -38,6 +61,7 @@ docker compose up -d     # sobe Postgres + serviço em containers
 - ES modules, imports absolutos a partir de `src/`.
 - Toda entrada externa (Telegram, LLM, API futura do 3SCheckout) passa por um schema Zod antes de tocar em lógica de negócio.
 - Testes unitários obrigatórios para: cálculo do esperado, validação de parse (casos válidos e malformados), decisão bate/não-bate.
+- Migrations aditivas por padrão — ver seção **Proteção de dados** acima.
 - Nomenclatura de branch: `feature/<nome-curto>`, `fix/<nome-curto>`.
 - Commits descritivos, no formato `tipo: descrição` (ex.: `feat: parse de contagem via LLM`).
 

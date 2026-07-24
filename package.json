@@ -13,7 +13,8 @@
     "migrate": "tsx src/persistence/migrate.ts",
     "db:generate": "drizzle-kit generate",
     "seed": "tsx src/persistence/seed.ts",
-    "seed:baseline": "tsx src/persistence/seedBaseline.ts"
+    "seed:baseline": "tsx src/persistence/seedBaseline.ts",
+    "backup": "bash scripts/backup-db.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
